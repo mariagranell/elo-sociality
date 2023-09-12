@@ -203,44 +203,44 @@ join_d2 <- join_d2 %>%
   mutate(LoserAge = calculate_age(DOBVic, FRVic, DIVic, Date))
 
 # Select columns of interest
-d <- join_d2[, c(1:3,9:12,15,19,20,24)]
+df <- join_d2[, c(1:3,9:12,15,19,20,24)]
 
-# Add AgeClass column to the dataframe pd
-d$AgeClassWinner <- get_age_class(d$WinnerSex, d$WinnerAge)
-d$AgeClassLoser <- get_age_class(d$LoserSex, d$LoserAge)
+# Adfdf AgeClass column to the dfataframe pdf
+df$AgeClassWinner <- get_age_class(df$WinnerSex, df$WinnerAge)
+df$AgeClassLoser <- get_age_class(df$LoserSex, df$LoserAge)
 # correct errors wavy ears, he is not a BB
-d[d$winner == "WavyEars","AgeClassWinner"] <- "SM"
-d[d$loser == "WavyEars","AgeClassLoser"] <- "SM"
+df[df$winner == "WavyEars","AgeClassWinner"] <- "SM"
+df[df$loser == "WavyEars","AgeClassLoser"] <- "SM"
 
 
 # Omit NA's ####
-d$AgeClassLoser[d$AgeClassLoser == ""] <- NA
-d$AgeClassWinner[d$AgeClassWinner == ""] <- NA
-d$Group[d$Group == ""] <- NA
+df$AgeClassLoser[df$AgeClassLoser == ""] <- NA
+df$AgeClassWinner[df$AgeClassWinner == ""] <- NA
+df$Group[df$Group == ""] <- NA
 
-d <- na.omit(d)
+df <- na.omit(df)
 
-# Keep only adult and subadult males
-d <- subset(d, d$AgeClassLoser%in% c("AM", "SM"))
-d <- subset(d, d$AgeClassWinner%in% c("AM", "SM"))
+# Keep only adfult andf subadfult males
+df <- subset(df, df$AgeClassLoser%in% "AF")
+df <- subset(df, df$AgeClassWinner%in% "AF")
 
-## select data baundaries for d -----------------
-# Calculate dominance hierarchy for the first darting.
-# between October 2021 and June 2022 is the data that i want
-# so I will select 3 months before october and 3 months after
-d <- d %>% filter(as.character(Date) > "2021-07-01" & as.character(Date) < "2022-06-01")
+## select dfata baundfaries for df -----------------
+# Calculate dfominance hierarchy for the first dfarting.
+# between October 2021 andf June 2022 is the dfata that i want
+# so I will select 3 months before october andf 3 months after
+df <- df %>% filter(as.character(Date) > "2021-07-01" & as.character(Date) < "2022-06-01")
 
-# check which groups have enough observations for the data range
-d %>% group_by(Group) %>% summarize(n = n())
+# check which groups have enough observations for the dfata range
+df %>% group_by(Group) %>% summarize(n = n())
 
-# Divide into groups
-BD <- subset(d,d$Group == ("Baie Dankie"))
-NH <- subset(d,d$Group == ("Noha"))
-KB <- subset(d,d$Group == ("Kubu"))
-AK <- subset(d,d$Group == ("Ankhase"))
-LT <- subset(d,d$Group == "Lemon Tree")
-CR <- subset(d,d$Group == ("Crossing"))
-IF <- subset(d,d$Group == ("IFamily"))
+# Dividfe into groups
+BD <- subset(df,df$Group == ("Baie Dankie"))
+NH <- subset(df,df$Group == ("Noha"))
+KB <- subset(df,df$Group == ("Kubu"))
+AK <- subset(df,df$Group == ("Ankhase"))
+LT <- subset(df,df$Group == ("Lemon Tree"))
+CR <- subset(df,df$Group == ("Crossing"))
+IF <- subset(df,df$Group == ("IFamily"))
 
 # check which groups have enough data
 
@@ -282,16 +282,6 @@ tail(BDpres)
 
 BDpres[is.na(BDpres)] <- 0
 
-# TODO: fix that from your own life history
-# There's some males where there are interactions before their first appearance
-# For example when a male dispersed twice into the same group
-# This creates problems so I delete them (easy way out)
-BD <- BD[!(BD$winner == "Kom" & BD$Date < "2022-01-20"),]
-BD <- BD[!(BD$loser == "Kom" & BD$Date < "2022-01-20"),]
-
-BD <- BD[!(BD$winner == "Xia" & BD$Date < "2022-08-09"),]
-BD <- BD[!(BD$loser == "Xia" & BD$Date < "2022-08-09"),]
-
 # Check whether data looks good
 seqcheck(winner=BD$winner, loser=BD$loser, Date=BD$Date, draw = NULL, presence=BDpres)
 # Warnings:
@@ -306,12 +296,6 @@ BDamELO <- elo.seq(winner = BD$winner, loser=BD$loser, Date=BD$Date, presence = 
 eloplot(BDamELO)
 summary(BDamELO)
 
-# Specific IDs over a specific time period:
-eloplot(BDamELO,
-        ids=c("Sey", "Pom", "Hee", "Dok", "Umb", "Flu", "Nak", "Kom", "Xia", "War")
-   ,from="2021-10-01",to="2022-06-01")
-
-
 # Define the starting dates and corresponding names
 date_ranges <- list(
   c("oct", "2021-11-01"),
@@ -321,7 +305,7 @@ date_ranges <- list(
   c("feb", "2022-03-01"),
   c("mar", "2022-04-01"),
   c("apr", "2022-05-01"),
-  c("may", "2022-05-17") # last date before june
+  c("may", "2022-05-12") # last date before june
 )
 
 BD[nrow(BD),1]
@@ -376,7 +360,8 @@ date_ranges <- list(
   c("jan", "2022-02-01"),
   c("feb", "2022-03-01"),
   c("mar", "2022-04-01"),
-  c("apr", "2022-04-23") # last date before june
+  c("apr", "2022-05-01"),
+  c("may", "2022-05-16")# last date before june
 )
 
 AK[nrow(AK),"Date"]
@@ -405,9 +390,6 @@ NHpres$Date <- as.Date(format(as.POSIXct(NHpres$Date, format = "%Y-%m-%d"), "%Y-
 colnames(NHpres)[1] <- "Delete"
 NHpres <- NHpres[,!grepl("Delete",names(NHpres))]
 
-NH <- NH[!(NH$winner == "Fle" & NH$Date < "2022-01-18"),]
-NH <- NH[!(NH$loser == "Fle" & NH$Date < "2022-01-18"),]
-
 # Check whether data looks good
 seqcheck(winner=NH$winner, loser=NH$loser, Date=NH$Date, draw = NULL, presence=NHpres)
 # Warnings:
@@ -431,7 +413,7 @@ date_ranges <- list(
   c("feb", "2022-03-01"),
   c("mar", "2022-04-01"),
   c("apr", "2022-05-01"),
-  c("may", "2022-05-03") # last date before june
+  c("may", "2022-05-17") # last date before june
 )
 
 NH[nrow(NH),1]
@@ -487,7 +469,8 @@ date_ranges <- list(
   c("jan", "2022-02-01"),
   c("feb", "2022-03-01"),
   c("mar", "2022-04-01"),
-  c("apr", "2022-04-15") # last day
+  c("apr", "2022-05-01"),
+  c("may", "2022-05-04") # last day
 )
 
 KB[nrow(KB),1]
@@ -528,14 +511,6 @@ seqcheck(winner=LT$winner, loser=LT$loser, Date=LT$Date, draw = NULL, presence=L
 # Presence starts earlier than data (makes sense)
 # IDs in datasequence and presence do not match:
 # The following IDs occur in the presence data but NOT in the data sequence ... (makes sense because we only selected adult females)
-LT <- LT[!(LT$winner == "Apa" & LT$Date < "2022-09-22"),]
-LT <- LT[!(LT$loser == "Apa" & LT$Date < "2022-09-22"),]
-
-LT <- LT[!(LT$winner == "Bab" & LT$Date < "2022-06-17"),]
-LT <- LT[!(LT$loser == "Bab" & LT$Date < "2022-06-17"),]
-
-LT <- LT[!(LT$winner == "Rat" & LT$Date < "2022-08-23"),]
-LT <- LT[!(LT$loser == "Rat" & LT$Date < "2022-08-23"),]
 
 LTamELO <- elo.seq(winner = LT$winner, loser=LT$loser, Date=LT$Date, presence = LTpres, runcheck=F)
 # Set runcheck = F since the warnings seqcheck gives are not a dealbreaker
@@ -550,8 +525,7 @@ date_ranges <- list(
   c("dec", "2022-01-01"),
   c("jan", "2022-02-01"),
   c("feb", "2022-03-01"),
-  c("mar", "2022-04-01"),
-  c("apr", "2022-05-12") # last day
+  c("mar", "2022-04-01") # last day
 )
 
 LT[nrow(LT),1]
@@ -592,14 +566,6 @@ seqcheck(winner=CR$winner, loser=CR$loser, Date=CR$Date, draw = NULL, presence=C
 # Presence starts earlier than data (makes sense)
 # IDs in datasequence and presence do not match:
 # The following IDs occur in the presence data but NOT in the data sequence ... (makes sense because we only selected adult females)
-CR <- CR[!(CR$winner == "Apa" & CR$Date < "2022-09-22"),]
-CR <- CR[!(CR$loser == "Apa" & CR$Date < "2022-09-22"),]
-
-CR <- CR[!(CR$winner == "Bab" & CR$Date < "2022-06-17"),]
-CR <- CR[!(CR$loser == "Bab" & CR$Date < "2022-06-17"),]
-
-CR <- CR[!(CR$winner == "Rat" & CR$Date < "2022-08-23"),]
-CR <- CR[!(CR$loser == "Rat" & CR$Date < "2022-08-23"),]
 
 CRamELO <- elo.seq(winner = CR$winner, loser=CR$loser, Date=CR$Date, presence = CRpres, runcheck=F)
 # Set runcheck = F since the warnings seqcheck gives are not a dealbreaker
@@ -613,7 +579,10 @@ date_ranges <- list(
   c("nov", "2021-12-01"),
   c("dec", "2022-01-01"),
   c("jan", "2022-02-01"),
-  c("feb", "2022-02-19") # last day
+  c("feb", "2022-03-01"),
+  c("mar", "2022-04-01"),
+  c("apr", "2022-05-01"),
+  c("may", "2022-05-03") # last day
 )
 
 CR[nrow(CR),1]
@@ -668,7 +637,7 @@ GP_rank2 <- GP_rank %>%
   arrange(AnimalID, Group, desc(range_numeric))  %>%
   slice(1) %>% select(!range_numeric)
 
-write.csv(GP_rank2, "/Rank_Males_oct2021-june2022.csv")
+write.csv(GP_rank2, "/Users/mariagranell/Repositories/elo-sociality/Rank_Females_oct2021-june2022.csv")
 
 # merge with the males of darting
 a <- elo_dmales %>%
