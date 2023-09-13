@@ -639,7 +639,10 @@ GP_rank2 <- GP_rank %>%
 
 write.csv(GP_rank2, "/Users/mariagranell/Repositories/elo-sociality/Rank_Females_oct2021-june2022.csv")
 
-# merge with the males of darting
-a <- elo_dmales %>%
-  left_join(GP_rank2, by = "AnimalID", relationship = "many-to-many")
-
+# Combine males and females hierarchies ---------
+f <- read.csv("/Users/mariagranell/Repositories/elo-sociality/Rank_Females_oct2021-june2022.csv")
+m <- read.csv("/Users/mariagranell/Repositories/elo-sociality/Rank_Males_oct2021-june2022.csv")
+f$Sex <- "f"
+m$Sex <- "m"
+combined <- f %>% rbind(.,m)
+write.csv(combined, "/Users/mariagranell/Repositories/elo-sociality/Rank_oct2021-june2022.csv")
