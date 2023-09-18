@@ -637,12 +637,12 @@ GP_rank2 <- GP_rank %>%
   arrange(AnimalID, Group, desc(range_numeric))  %>%
   slice(1) %>% select(!range_numeric)
 
-write.csv(GP_rank2, "/Users/mariagranell/Repositories/elo-sociality/Rank_Females_oct2021-june2022.csv")
+write.csv(GP_rank2, "/Users/mariagranell/Repositories/elo-sociality/Rank_Males_oct2021-june2022.csv", row.names = F)
 
 # Combine males and females hierarchies ---------
 f <- read.csv("/Users/mariagranell/Repositories/elo-sociality/Rank_Females_oct2021-june2022.csv")
 m <- read.csv("/Users/mariagranell/Repositories/elo-sociality/Rank_Males_oct2021-june2022.csv")
-f$Sex <- "f"
-m$Sex <- "m"
+f$Sex <- "female"
+m$Sex <- "male"
 combined <- f %>% rbind(.,m)
-write.csv(combined, "/Users/mariagranell/Repositories/elo-sociality/Rank_oct2021-june2022.csv")
+write.csv(combined, "/Users/mariagranell/Repositories/elo-sociality/Rank_oct2021-june2022.csv", row.names = F)
