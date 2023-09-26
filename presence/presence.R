@@ -591,3 +591,5 @@ View(NHpresence)
 
 # Save output
 write.csv(NHpresence,"C:/Users/josef/OneDrive - unine.ch/Documents/PhD/IVP DATA/Presence/NH2016-2022.csv")
+
+# save presence of all groups
