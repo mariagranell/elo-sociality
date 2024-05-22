@@ -2,21 +2,29 @@
 # to do this scrip you need a life history file and
 # agoinistic data
 
+# Changes madre from the original script
+# Behaviours added in the categores aggresive and retreat
+# Changed the decide.sin funciton to acommodate for passive actions like "being hit"
+
 library(EloRating)
 library(dplyr)
+library(lubridate)
 source("/Users/mariagranell/Repositories/data/functions.R")
 
 ## Load your data using the "Creating ago file"
-d <- read.csv("/Users/mariagranell/Repositories/elo-sociality/FinalAgonistic.csv", header=TRUE, na.strings=c(""," ","NA"))
+dd <- read.csv("/Users/mariagranell/Repositories/elo-sociality/data/FinalAgonistic.csv", header=TRUE, na.strings=c(""," ","NA")) %>%
+  dplyr::select(-X)
+
+# for the darting of 2023 I will take data for the ranking and the sociality vectors from 2022-07-01 until 2023-02-01.
+# for more information check the README of combination darting
+
+d <- dd %>% filter(Date >= "2022-07-01" & Date <= "2023-02-01")
 
 ## Assumptions Elo-rating package:
 # File is ordered by date
 # There are no empty cells
 # IDs occur more than once
 # Loser ID is different from winner ID
-
-# Remove first column called "X"
-d <- d[,c(2:8)]
 
 # Order by date
 d <- dplyr::arrange(d, Date)
@@ -47,40 +55,65 @@ fight.data <- d
 
 ### Write a function to decide for each obs who is the winner (decide.win) based on categories of behaviours specific to vic or agg
 # Victim = individual ending up the conflict being the loser, thus considered as the most submissive one
-ret_beh <- c('fl', 'rt', 'av', 'ja', 'cr', 'ss', 'gu')
+ret_beh <- c('fl', 'rt', 'av', 'ja', 'cr', 'ss', 'gu',
+                        'le','sc') # these behaviour were added by MR on 20-05-2024
 
 # Aggressor = from the least (cat_1) to the most aggressive behaviours (cat_3), the animal performing the most intense aggressive behaviour is the winner
-agg_cat <- list(cat_3=c('bi', 'gb', 'hi', 'fi', 'hh', 'so'), 
-                cat_2='ch', cat_1=c('ac', 'at', 'dp', 'tp', 'st', 'su', 'fh', 'sf', 'hb', 'bd'))
+agg_cat <- list(cat_3=c('bi', 'gb', 'hi', 'fi', 'hh', 'so'),
+                cat_2=c('ch', 'st', 'tp','at'), cat_1=c('ac', 'dp', 'su', 'fh', 'sf', 'bd',
+                        'ap','wb', 'hb')) # these behaviour were added by MR on 20-05-2024
 
 
 # write the function which defines winner/loser by looking at which individual ends the conflict and/or 
 # which one performs the most aggressive behaviours
-decide.win <- function(beh_x, beh_y){
+# I modified the function so, when there is a passive form is not considered an aggressive behaviour
+decide.win <- function(beh_x, beh_y) {
   x <- 0
   y <- 0
-  
-  for(beh_ in ret_beh){
-    x <- x + lengths(regmatches(beh_x, gregexpr(beh_, beh_x)))
-    y <- y + lengths(regmatches(beh_y, gregexpr(beh_, beh_y)))
+
+  # Count retreat behaviors
+  for (beh_ in ret_beh) {
+    # Match all occurrences of the behavior
+    x_matches <- gregexpr(beh_, beh_x)[[1]]
+    y_matches <- gregexpr(beh_, beh_y)[[1]]
+
+    # Filter out matches that are preceded by 'b', i.e. remove the passive actions, "being ..."
+    x_filtered <- x_matches[x_matches != -1 & !sapply(x_matches, function(pos) substr(beh_x, pos-1, pos-1) == "b")]
+    y_filtered <- y_matches[y_matches != -1 & !sapply(y_matches, function(pos) substr(beh_y, pos-1, pos-1) == "b")]
+
+    x <- x + length(x_filtered)
+    y <- y + length(y_filtered)
   }
-  if(x < y) return(1)
-  if(y < x) return(2)
-  
-  for(cat_ in agg_cat){
+
+  # Determine initial winner based on retreat behaviors
+  if (x < y) return(1)
+  if (y < x) return(2)
+
+  # Count aggressive behaviors
+  for (cat_ in agg_cat) {
     x <- 0
     y <- 0
-    
-    for(beh_ in cat_){
-      x <- x + lengths(regmatches(beh_x, gregexpr(beh_, beh_x)))
-      y <- y + lengths(regmatches(beh_y, gregexpr(beh_, beh_y)))
+
+    for (beh_ in cat_) {
+      # Match all occurrences of the behavior
+      x_matches <- gregexpr(beh_, beh_x)[[1]]
+      y_matches <- gregexpr(beh_, beh_y)[[1]]
+
+      # Filter out matches that are preceded by 'b', i.e. remove the passive actions, "being ..."
+      x_filtered <- x_matches[x_matches != -1 & !sapply(x_matches, function(pos) substr(beh_x, pos-1, pos-1) == "b")]
+      y_filtered <- y_matches[y_matches != -1 & !sapply(y_matches, function(pos) substr(beh_y, pos-1, pos-1) == "b")]
+
+      x <- x + length(x_filtered)
+      y <- y + length(y_filtered)
     }
-    
-    if(x > y) return(1)
-    if(y > x) return(2)
+
+    if (x > y) return(1)
+    if (y > x) return(2)
   }
+
   return(0)
 }
+
 
 # add win/lose to fight.data
 fight.data$win_lose <- mapply(FUN = decide.win, 
@@ -115,7 +148,7 @@ seq.data$loser <- NA
 seq.data$BehaviourL <- NA
 
 i=1
-for(i in 1:nrow(seq.data)){
+for(i in seq_len(nrow(seq.data))){
   if (seq.data$win_lose[i]=="1") seq.data$winner[i] <- as.character(seq.data$Aggressor[i])
   if (seq.data$win_lose[i]=="1") seq.data$BehaviourW[i] <- as.character(seq.data$AggressorBehaviour[i])
   if (seq.data$win_lose[i]=="1") seq.data$loser[i] <- as.character(seq.data$Victim[i])
@@ -138,16 +171,16 @@ rownames(seq.data) <- NULL
 
 # add intensity: mild, chase, severe
 seq.data$intensity <- NA
-mild <- which(grepl("ap|ac|ag|at|dp|tp|st|vo|gu|sc|ap0|ap2|ap10|hb",seq.data$BehaviourW)=="TRUE")
+mild <- which(grepl("ap|ac|ag|at|dp|tp|su|wb|vo|gu|sc|ap0|ap2|ap10|hb|ig",seq.data$BehaviourW)=="TRUE")
 seq.data[mild,14] <- "mild"
-chase <- which(grepl("ch",seq.data$BehaviourW)=="TRUE")
+chase <- which(grepl("ch|st|tp|at",seq.data$BehaviourW)=="TRUE")
 seq.data[chase,14] <- "chase" 
 severe <- which(grepl("bi|gb|hi|fi|hh|so",seq.data$BehaviourW)=="TRUE")
 seq.data[severe,14] <- "severe"
 
 table(seq.data$intensity)
-#1542+11149+2452 # 15143
-289+1279+387 # 1955
+1761+815+540 # 3116
+
 # Exclude the interactions that had no clear winners
 X <- which(is.na(seq.data$intensity))
 seq.data <- seq.data[-X,]
@@ -167,80 +200,122 @@ str(d)
 # Correct mistakes
 d$winner <- as.character(d$winner)
 d$loser <- as.character(d$loser)
-d$winner[d$winner == "DodgyKnee"] <- "Dodg"
-d$loser[d$loser == "DodgyKnee"] <- "Dodg"
 
+# change group names to short names
+d <- change_group_names(d,"Group")
 
-## Link life history to individuals ####
+## Link life history to individuals #### # modified to use dplyr
+
 # Import data
-LHdata <- read.csv("/Users/mariagranell/Repositories/elo-sociality/IVP_Lifehistory_260523.csv", header = T, stringsAsFactors = F, na.strings = c('NA', 'Not yet'))
+LHdata <- read.csv2("/Users/mariagranell/Repositories/data/life_history/tbl_Creation/TBL/factchecked_LH_171123.csv", header = T, stringsAsFactors = F, na.strings = c('NA', 'Not yet')) %>%
+    # add info that I am missing
+  mutate(Sex = case_when(
+    AnimalCode == "Kom" ~ "M",
+    AnimalCode == "Ted" ~ "M",
+    AnimalCode == "Zeu" ~ "M",
+    AnimalCode == "Enge" ~ "F",
+    AnimalCode == "Gese" ~ "F", TRUE ~ Sex),
+         DOB_estimate = case_when( # so they are all adults
+    AnimalCode == "Kom" ~ "2010-01-01",
+    AnimalCode == "Ted" ~ "2010-01-01",
+    AnimalCode == "Zeu" ~ "2010-01-01",
+    AnimalCode == "Enge" ~ "2010-01-01",
+    AnimalCode == "Gese" ~ "2010-01-01", TRUE ~ DOB_estimate),
+         StartDate_mb = case_when( # so they are included in the study
+    AnimalCode == "Kom" ~ "2022-01-31",
+    AnimalCode == "Ted" ~ "2022-01-31",
+    AnimalCode == "Zeu" ~ "2022-01-31",
+    AnimalCode == "Enge" ~ "2022-01-31",
+    AnimalCode == "Gese" ~ "2022-01-31", TRUE ~ StartDate_mb),
+         EndDate_mb = case_when( # so they are included in the study
+    AnimalCode == "Kom" ~ "2023-01-31",
+    AnimalCode == "Ted" ~ "2023-01-31",
+    AnimalCode == "Zeu" ~ "2023-01-31",
+    AnimalCode == "Enge" ~ "2023-01-31",
+    AnimalCode == "Gese" ~ "2023-01-31", TRUE ~ EndDate_mb),
+         Group_mb = case_when(
+    AnimalCode == "Kom" ~ "BD",
+    AnimalCode == "Ted" ~ "LT",
+    AnimalCode == "Zeu" ~ "IF",
+    AnimalCode == "Enge" ~ "BD",
+    AnimalCode == "Gese" ~ "BD", TRUE ~ Group_mb)) %>%
+  # remove individuals that were not present in the study period
+  filter(EndDate_mb >= "2022-07-01" & StartDate_mb <= "2023-01-31") %>%
+  filter(AnimalCode != "Apa" | Tenure_type != "MigrationGroup1") %>%
+  distinct(.)
 
-# Format dates using the following output = YYYY-mm-dd
-LHdata$DOB <- as.Date(format(as.POSIXct(LHdata$DOB, format = "%d/%m/%Y"), "%Y-%m-%d"))
-LHdata$FirstRecorded <- as.Date(format(as.POSIXct(LHdata$FirstRecorded, format = "%d/%m/%Y"), "%Y-%m-%d"))
-LHdata$DateImmigration1 <- as.Date(format(as.POSIXct(LHdata$DateImmigration1,format = "%d/%m/%Y"), "%Y-%m-%d"))
 
-LHage <- LHdata[,c(3,5,7,8,16)]
-colnames(LHage)[1] <- "IDIndividual1"
-LHage <- subset(LHage, !LHage$IDIndividual1%in% NA)
+LHdata <- change_group_names(LHdata,"Group_mb")
 
-# Aggressor first
-LHAgg <- LHage
-colnames(LHAgg)[1] <- "winner"
-join_d <- left_join(d, LHAgg, by = "winner", multiple = "all")
-colnames(join_d)[15:18] <- c("WinnerSex", "DOBAgg", "FRAgg", "DIAgg")
-join_d <- join_d %>%
+# Firstly I am going to make sure that all the OtherID names used in the dataframe are updated with the AnimalCode,
+# for both the collumns winner and loser
+d <- d %>%
+  left_join(LHdata %>% select(OtherID, AnimalCode), by = c("winner" = "OtherID")) %>%
+  mutate(winner = coalesce(AnimalCode, winner)) %>%
+  select(-AnimalCode) %>%
+  left_join(LHdata %>% select(OtherID, AnimalCode), by = c("loser" = "OtherID")) %>%
+  mutate(loser = coalesce(AnimalCode, loser)) %>%
+  select(-AnimalCode) %>%
+  # correct Duckies entry
+  mutate(winner = ifelse(winner == "Duckie", "Duc", winner),
+         loser = ifelse(loser == "Duckie", "Duc", loser))
+
+# lh for the winner:
+lh_winner <-LHdata %>%
+  dplyr::select(AnimalCode, Sex, DOB_estimate, FirstDate, StartDate_mb, Group_mb, OtherID) %>%
+  rename(WinnerSex = Sex, DOBAgg = DOB_estimate, FRAgg = FirstDate, DIAgg = StartDate_mb, GpAgg = Group_mb)
+
+# lh for the loser:
+lh_loser <-LHdata %>%
+  dplyr::select(AnimalCode, Sex, DOB_estimate, FirstDate, StartDate_mb, Group_mb, OtherID) %>%
+  rename(LoserSex = Sex, DOBVic = DOB_estimate, FRVic = FirstDate, DIVic = StartDate_mb, GpVic = Group_mb)
+
+join_d2 <- d %>%
+  mutate(Date = as.character(Date)) %>%
+  # merge the winner
+  left_join(., lh_winner, by =c("winner" = "AnimalCode", "Group" = "GpAgg")) %>%
+  left_join(., lh_loser, by =c("loser" = "AnimalCode",  "Group" = "GpVic")) %>%
   rowwise() %>%
-  mutate(WinnerAge = calculate_age(DOBAgg, FRAgg, DIAgg, Date))
+  mutate(WinnerAge = add_age(DOBAgg, Date, "Years"),
+         LoserAge = add_age(DOBVic, Date, "Years"))
 
-# Now victim
-LHVic <- LHage
-colnames(LHVic)[1] <- "loser"
-join_d2 <- left_join(join_d, LHVic, by = "loser", multiple = "all", relationship = "many-to-many")
-colnames(join_d2)[20:23] <- c("LoserSex", "DOBVic", "FRVic", "DIVic")
-join_d2 <- join_d2 %>%
-  rowwise() %>%
-  mutate(LoserAge = calculate_age(DOBVic, FRVic, DIVic, Date))
-
-# Select columns of interest
-df <- join_d2[, c(1:3,9:12,15,19,20,24)]
+df <- join_d2 %>% select(Date, Time, Group, winner, BehaviourW, loser, BehaviourL, WinnerSex, WinnerAge, LoserSex, LoserAge)
 
 # Adfdf AgeClass column to the dfataframe pdf
 df$AgeClassWinner <- get_age_class(df$WinnerSex, df$WinnerAge)
 df$AgeClassLoser <- get_age_class(df$LoserSex, df$LoserAge)
-# correct errors wavy ears, he is not a BB
-df[df$winner == "WavyEars","AgeClassWinner"] <- "SM"
-df[df$loser == "WavyEars","AgeClassLoser"] <- "SM"
 
+# Investigate NA ####
 
-# Omit NA's ####
-df$AgeClassLoser[df$AgeClassLoser == ""] <- NA
-df$AgeClassWinner[df$AgeClassWinner == ""] <- NA
-df$Group[df$Group == ""] <- NA
+# winner and loser, only Ves, Yam and Yub are missing, I decide to take the loses. If they are from CR or IF or juveniles
+# since we will delte them later
+a <- join_d2 %>%
+   filter(is.na(LoserAge)) %>%
+  distinct(loser)
 
 df <- na.omit(df)
 
-# Keep only adfult andf subadfult males
-df <- subset(df, df$AgeClassLoser%in% "AF")
-df <- subset(df, df$AgeClassWinner%in% "AF")
 
-## select dfata baundfaries for df -----------------
-# Calculate dfominance hierarchy for the first dfarting.
-# between October 2021 andf June 2022 is the dfata that i want
-# so I will select 3 months before october andf 3 months after
-df <- df %>% filter(as.character(Date) > "2021-07-01" & as.character(Date) < "2022-06-01")
 
-# check which groups have enough observations for the dfata range
-df %>% group_by(Group) %>% summarize(n = n())
+# Keep only adult females
+df_F <- df %>% filter(AgeClassLoser == "AF" & AgeClassWinner == "AF")
+df_M <- df %>% filter(AgeClassWinner %in% c("AM", "SM") & AgeClassLoser %in% c("AM", "SM"))
 
-# Dividfe into groups
-BD <- subset(df,df$Group == ("Baie Dankie"))
-NH <- subset(df,df$Group == ("Noha"))
-KB <- subset(df,df$Group == ("Kubu"))
-AK <- subset(df,df$Group == ("Ankhase"))
-LT <- subset(df,df$Group == ("Lemon Tree"))
-CR <- subset(df,df$Group == ("Crossing"))
-IF <- subset(df,df$Group == ("IFamily"))
+## From now on you perform the hierarchy on Males or females
+## select data baundaries for df -----------------
+# Calculate dominance hierarchy for the first darting (2023)
+# starting date: "2022-07-01", ending date "2023-01-31"
+
+# check which groups have enough observations for the data range
+df_F %>% group_by(Group) %>% summarize(n = n())
+# only Ak, Bd, Kb and Nh
+
+# Divide into groups
+BD <- subset(df_F,df_F$Group == ("BD"))
+NH <- subset(df_F,df_F$Group == ("NH"))
+KB <- subset(df_F,df_F$Group == ("KB"))
+AK <- subset(df_F,df_F$Group == ("AK"))
+
 
 # check which groups have enough data
 
@@ -252,30 +327,24 @@ IF <- subset(df,df$Group == ("IFamily"))
 # starting date of the data used in the elo.seq() until the selected date.
 process_date_range <- function(elo_seq, name_range, selected_date) {
   Gp_data <- extract_elo(elo_seq, selected_date, standardize = TRUE)
-  Gp_data <- data.frame(AnimalID = names(Gp_data), Rank = as.numeric(Gp_data)) %>%
+  Gp_data <- data.frame(AnimalCode = names(Gp_data), Rank = as.numeric(Gp_data)) %>%
     mutate(n_males = nrow(.), range = name_range)
   return(Gp_data)
 }
 
-
 #### Baie Dankie  ####
 
 # Darted individuals in BD
-# F: Pann, Miel, Asis
-# M: Sey, Pom, Hee, Dok, Umb, Flu, Nak, Kom, Xia, War
+# F: Miel, Ouli
+# M: Xin, Nak, Win, Dix, Tot, Xia, Bob
 
 # To incorporate presence data
 # First read the presence matrix
-
-BDpres <- read.csv("/Users/mariagranell/Repositories/data/presence/presenceBD2020-2023.csv", header=TRUE)
-BDpres$Date <- as.Date(format(as.POSIXct(BDpres$Date, format = "%Y-%m-%d"), "%Y-%m-%d"))
-#BDpres$Date  <- as.numeric(format(as.POSIXct(BDpres$Date, format = "%d/%m/%Y"), "%d/%m/%Y"))
-colnames(BDpres)[1] <- "Delete" # I get these two weird columns called "X" and "V1" that I delete
-colnames(BDpres)[3] <- "Delete"
-BDpres <- BDpres[,!grepl("Delete",names(BDpres))]
+BDpres <- read.csv("/Users/mariagranell/Repositories/data/presence/presenceBD2020-2023.csv", header=TRUE) %>%
+  dplyr::select(-X, -V1) %>% # I get these two weird columns called "X" and "V1" that I delete
+  mutate(Date = ymd(Date))
 
 # Check if data look good
-
 str(BDpres)
 head(BDpres)
 tail(BDpres)
@@ -296,19 +365,18 @@ BDamELO <- elo.seq(winner = BD$winner, loser=BD$loser, Date=BD$Date, presence = 
 eloplot(BDamELO)
 summary(BDamELO)
 
+# starting date: "2022-07-01", ending date "2023-01-31"
 # Define the starting dates and corresponding names
 date_ranges <- list(
-  c("oct", "2021-11-01"),
-  c("nov", "2021-12-01"),
-  c("dec", "2022-01-01"),
-  c("jan", "2022-02-01"),
-  c("feb", "2022-03-01"),
-  c("mar", "2022-04-01"),
-  c("apr", "2022-05-01"),
-  c("may", "2022-05-12") # last date before june
+  c("jun", "2022-07-07"), #adjusted for BD
+  c("jul", "2022-08-01"),
+  c("aug", "2022-09-01"),
+  c("sep", "2022-10-01"),
+  c("oct", "2022-11-01"),
+  c("nov", "2022-12-01"),
+  c("dec", "2023-01-01"),
+  c("jan", "2023-01-31") # we includde january as a month for the hair to grow
 )
-
-BD[nrow(BD),1]
 
 # Initialize an empty data frame
 BDrank <- data.frame()
@@ -318,7 +386,7 @@ for (range_info in date_ranges) {
   range_name <- range_info[1]
   start_date <- range_info[2]
 
-  BD_data <- process_date_range(BDamELO, range_name, start_date)
+  BD_data <- process_date_range(BDamELO, range_name[], start_date[])
   BDrank <- rbind(BDrank, BD_data)
 }
 BDrank <- BDrank %>% mutate(Group = "BD")
@@ -327,10 +395,9 @@ BDrank <- BDrank %>% mutate(Group = "BD")
 # To incorporate presence data
 # First read the presence matrix
 
-AKpres <- read.csv("/Users/mariagranell/Repositories/data/presence/presenceAK2020-2023.csv", header=TRUE)
-AKpres$Date  <- as.Date(as.character(AKpres$Date))
-colnames(AKpres)[1] <- "Delete"
-AKpres <- AKpres[,!grepl("Delete",names(AKpres))]
+AKpres <- read.csv("/Users/mariagranell/Repositories/data/presence/presenceAK2020-2023.csv", header=TRUE) %>%
+  dplyr::select(-X) %>% # I get these two weird columns called "X" and "V1" that I delete
+  mutate(Date = ymd(Date))
 
 # Check if data look good
 
@@ -354,17 +421,15 @@ eloplot(AKamELO)
 
 # Define the starting dates and corresponding names
 date_ranges <- list(
-  c("oct", "2021-11-01"),
-  c("nov", "2021-12-01"),
-  c("dec", "2022-01-01"),
-  c("jan", "2022-02-01"),
-  c("feb", "2022-03-01"),
-  c("mar", "2022-04-01"),
-  c("apr", "2022-05-01"),
-  c("may", "2022-05-16")# last date before june
+  c("jun", "2022-07-06"), #adjusted for AK
+  c("jul", "2022-08-01"),
+  c("aug", "2022-09-01"),
+  c("sep", "2022-10-01"),
+  c("oct", "2022-11-01"),
+  c("nov", "2022-12-01"),
+  c("dec", "2023-01-01"),
+  c("jan", "2023-01-30") # we includde january as a month for the hair to grow
 )
-
-AK[nrow(AK),"Date"]
 
 # Initialize an empty data frame
 AKrank <- data.frame()
@@ -384,11 +449,9 @@ AKrank <- AKrank %>% mutate(Group = "AK")
 # To incorporate presence data
 # First read the presence matrix
 
-NHpres <- read.csv("/Users/mariagranell/Repositories/data/presence/presenceNH2020-2023.csv", header=TRUE)
-NHpres$Date <- as.Date(format(as.POSIXct(NHpres$Date, format = "%Y-%m-%d"), "%Y-%m-%d"))
-#NHpres$Date  <- as.Date(as.character(NHpres$Date))
-colnames(NHpres)[1] <- "Delete"
-NHpres <- NHpres[,!grepl("Delete",names(NHpres))]
+NHpres <- read.csv("/Users/mariagranell/Repositories/data/presence/presenceNH2020-2023.csv", header=TRUE) %>%
+  dplyr::select(-X) %>% # I get these two weird columns called "X" and "V1" that I delete
+  mutate(Date = ymd(Date))
 
 # Check whether data looks good
 seqcheck(winner=NH$winner, loser=NH$loser, Date=NH$Date, draw = NULL, presence=NHpres)
@@ -406,17 +469,15 @@ eloplot(NHamELO)
 
 # Define the starting dates and corresponding names
 date_ranges <- list(
-  c("oct", "2021-11-01"),
-  c("nov", "2021-12-01"),
-  c("dec", "2022-01-01"),
-  c("jan", "2022-02-01"),
-  c("feb", "2022-03-01"),
-  c("mar", "2022-04-01"),
-  c("apr", "2022-05-01"),
-  c("may", "2022-05-17") # last date before june
+  c("jun", "2022-07-06"), #adjusted for NH
+  c("jul", "2022-08-01"),
+  c("aug", "2022-09-01"),
+  c("sep", "2022-10-01"),
+  c("oct", "2022-11-01"),
+  c("nov", "2022-12-01"),
+  c("dec", "2023-01-01"),
+  c("jan", "2023-01-31") # we includde january as a month for the hair to grow
 )
-
-NH[nrow(NH),1]
 
 # Initialize an empty data frame
 NHrank <- data.frame()
@@ -436,10 +497,9 @@ NHrank <- NHrank%>% mutate(Group = "NH")
 # To incorporate presence data
 # First read the presence matrix
 
-KBpres <- read.csv("/Users/mariagranell/Repositories/data/presence/presenceKB2020-2023.csv", header=TRUE)
-KBpres$Date  <- as.Date(as.character(KBpres$Date))
-colnames(KBpres)[1] <- "Delete"
-KBpres <- KBpres[,!grepl("Delete",names(KBpres))]
+KBpres <- read.csv("/Users/mariagranell/Repositories/data/presence/presenceKB2020-2023.csv", header=TRUE) %>%
+  dplyr::select(-X) %>% # I get these two weird columns called "X" and "V1" that I delete
+  mutate(Date = ymd(Date))
 
 # Check if data look good
 
@@ -463,17 +523,15 @@ eloplot(KBamELO)
 
 # Define the starting dates and corresponding names
 date_ranges <- list(
-  c("oct", "2021-11-01"),
-  c("nov", "2021-12-01"),
-  c("dec", "2022-01-01"),
-  c("jan", "2022-02-01"),
-  c("feb", "2022-03-01"),
-  c("mar", "2022-04-01"),
-  c("apr", "2022-05-01"),
-  c("may", "2022-05-04") # last day
+  c("jun", "2022-07-13"), #adjusted for KB
+  c("jul", "2022-08-01"),
+  c("aug", "2022-09-01"),
+  c("sep", "2022-10-01"),
+  c("oct", "2022-11-01"),
+  c("nov", "2022-12-01"),
+  c("dec", "2023-01-01"),
+  c("jan", "2023-01-26") # we includde january as a month for the hair to grow
 )
-
-KB[nrow(KB),1]
 
 # Initialize an empty data frame
 KBrank <- data.frame()
@@ -489,126 +547,16 @@ for (range_info in date_ranges) {
 
 KBrank <- KBrank %>% mutate(Group = "KB")
 
-#### Lemon Tree ####
 
-# To incorporate presence data
-# First read the presence matrix
+#### CREATE A TABLE WITH THE INDIVIDUALS OF INTEREST #############
+elo_dmales <- read.csv("/Users/mariagranell/Repositories/hormones/hormone_hair/2023darting/merged_hormone_data_2023.csv") %>%
+  dplyr::select(AnimalCode, Group, Sex, Age, Date_darting) %>%
+  unique(.)
 
-LTpres <- read.csv("/Users/mariagranell/Repositories/data/presence/presenceLT2020-2023.csv", header=TRUE)
-LTpres$Date  <- as.Date(as.character(LTpres$Date))
-colnames(LTpres)[1] <- "Delete"
-LTpres <- LTpres[,!grepl("Delete",names(LTpres))]
-
-# Check if data look good
-str(LTpres)
-head(LTpres)
-tail(LTpres)
-
-# Check whether data looks good
-seqcheck(winner=LT$winner, loser=LT$loser, Date=LT$Date, draw = NULL, presence=LTpres)
-# Warnings:
-# Date column is not ordered (not huge problem)
-# Presence starts earlier than data (makes sense)
-# IDs in datasequence and presence do not match:
-# The following IDs occur in the presence data but NOT in the data sequence ... (makes sense because we only selected adult females)
-
-LTamELO <- elo.seq(winner = LT$winner, loser=LT$loser, Date=LT$Date, presence = LTpres, runcheck=F)
-# Set runcheck = F since the warnings seqcheck gives are not a dealbreaker
-
-summary(LTamELO)
-eloplot(LTamELO)
-
-# Define the starting dates and corresponding names
-date_ranges <- list(
-  c("oct", "2021-11-01"),
-  c("nov", "2021-12-01"),
-  c("dec", "2022-01-01"),
-  c("jan", "2022-02-01"),
-  c("feb", "2022-03-01"),
-  c("mar", "2022-04-01") # last day
-)
-
-LT[nrow(LT),1]
-
-# Initialize an empty data frame
-LTrank <- data.frame()
-
-# Iterate through date ranges and process data
-for (range_info in date_ranges) {
-  range_name <- range_info[1]
-  start_date <- range_info[2]
-
-  LT_data <- process_date_range(LTamELO, range_name, start_date)
-  LTrank <- rbind(LTrank, LT_data)
-}
-
-LTrank <- LTrank %>% mutate(Group = "LT")
-
-#### Crossing ####
-
-# To incorporate presence data
-# First read the presence matrix
-
-CRpres <- read.csv("/Users/mariagranell/Repositories/data/presence/presenceCR2020-2023.csv", header=TRUE)
-CRpres$Date  <- as.Date(as.character(CRpres$Date))
-colnames(CRpres)[1] <- "Delete"
-CRpres <- CRpres[,!grepl("Delete",names(CRpres))]
-
-# Check if data look good
-str(CRpres)
-head(CRpres)
-tail(CRpres)
-
-# Check whether data looks good
-seqcheck(winner=CR$winner, loser=CR$loser, Date=CR$Date, draw = NULL, presence=CRpres)
-# Warnings:
-# Date column is not ordered (not huge problem)
-# Presence starts earlier than data (makes sense)
-# IDs in datasequence and presence do not match:
-# The following IDs occur in the presence data but NOT in the data sequence ... (makes sense because we only selected adult females)
-
-CRamELO <- elo.seq(winner = CR$winner, loser=CR$loser, Date=CR$Date, presence = CRpres, runcheck=F)
-# Set runcheck = F since the warnings seqcheck gives are not a dealbreaker
-
-summary(CRamELO)
-eloplot(CRamELO)
-
-# Define the starting dates and corresponding names
-date_ranges <- list(
-  c("oct", "2021-11-01"),
-  c("nov", "2021-12-01"),
-  c("dec", "2022-01-01"),
-  c("jan", "2022-02-01"),
-  c("feb", "2022-03-01"),
-  c("mar", "2022-04-01"),
-  c("apr", "2022-05-01"),
-  c("may", "2022-05-03") # last day
-)
-
-CR[nrow(CR),1]
-
-# Initialize an empty data frame
-CRrank <- data.frame()
-
-# Iterate through date ranges and process data
-for (range_info in date_ranges) {
-  range_name <- range_info[1]
-  start_date <- range_info[2]
-
-  CR_data <- process_date_range(CRamELO, range_name, start_date)
-  CRrank <- rbind(CRrank, CR_data)
-}
-
-CRrank <- CRrank %>% mutate(Group = "CR")
-
-
-#### CREATE A TABLE WITH THE MALES OF INTEREST #############
-elo_dmales <- read.csv("/Users/mariagranell/Repositories/hormones/hormone_hair/data/merged_hormone_data_2022.csv")
-elo_dmales <- elo_dmales[, 9:14] %>% unique(.)
-
+# CHANGE FOR EACH SEX, MALES OR FEMALES
 # merge all the rank data
 GP_rank <- BDrank %>%
-  rbind(AKrank, NHrank, KBrank, LTrank, CRrank)
+  rbind(AKrank, NHrank, KBrank)
 
 # How I calculated the variation in rank per idividual:
 # First I summed all the real ranks of each month.                                    real_ranks = sum(Rank),
@@ -622,29 +570,29 @@ GP_rank <- BDrank %>%
 
 # calculate rank variation. And keep average rank of last months before june.
 GP_rank2 <- GP_rank %>%
-  group_by(AnimalID, Group) %>%
+  group_by(AnimalCode, Group) %>%
   mutate(
-    variation_rank = (sum(Rank) - ifelse(any(range == "oct"), n() * Rank[range == "oct"], 0))
+    variation_rank = sum(Rank, na.rm = T) - ifelse(any(range == "jun"), n() * Rank[range == "jun"], 0)
   ) %>%
     mutate(range_numeric = case_when(
-      range == "oct" ~ 1,
-      range == "nov" ~ 2,
-      range == "dec" ~ 3,
-      range == "jan" ~ 4,
-      range == "feb" ~ 5,
-      range == "mar" ~ 6,
-      range == "apr" ~ 7,
-      range == "may" ~ 8),
-    AnimalID = case_when(AnimalID == "WavyEars" ~ "Wavy_ears", TRUE ~ AnimalID)) %>%
-  arrange(AnimalID, Group, desc(range_numeric))  %>%
+      range == "jun" ~ 1,
+      range == "jul" ~ 2,
+      range == "aug" ~ 3,
+      range == "sep" ~ 4,
+      range == "oct" ~ 5,
+      range == "nov" ~ 6,
+      range == "dic" ~ 7,
+      range == "jan" ~ 8)) %>%
+  arrange(AnimalCode, Group, desc(range_numeric))  %>%
   slice(1) %>% select(!range_numeric)
 
-write.csv(GP_rank2, "/Users/mariagranell/Repositories/elo-sociality/Rank_Males_oct2021-june2022.csv", row.names = F)
+# Change for Males or Females
+#write.csv(GP_rank2, "/Users/mariagranell/Repositories/elo-sociality/elo/darting2023/Rank_Females_jun2022-jan2023.csv", row.names = F)
 
 # Combine males and females hierarchies ---------
-f <- read.csv("/Users/mariagranell/Repositories/elo-sociality/Rank_Females_oct2021-june2022.csv")
-m <- read.csv("/Users/mariagranell/Repositories/elo-sociality/Rank_Males_oct2021-june2022.csv")
+f <- read.csv("/Users/mariagranell/Repositories/elo-sociality/elo/darting2023/Rank_Females_jun2022-jan2023")
+m <- read.csv("/Users/mariagranell/Repositories/elo-sociality/elo/darting2023/Rank_Males_jun2022-jan2023")
 f$Sex <- "female"
 m$Sex <- "male"
 combined <- f %>% rbind(.,m)
-write.csv(combined, "/Users/mariagranell/Repositories/elo-sociality/Rank_oct2021-june2022.csv", row.names = F)
+write.csv(combined, "/Users/mariagranell/Repositories/elo-sociality/elo/darting2023/Rank_jun2022-jan2023.csv", row.names = F)

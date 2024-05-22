@@ -6,6 +6,7 @@
 # This code requires you to load the data from the file sociality-csi.R
 # FIRST you can find how to create a dataframe to extarct all sociality vectors
 # SECOND an exploration and plotting of the tutorial
+# tutorial: http://www.randigriffin.com/2017/04/26/primate-social-networks-in-igraph.html
 # ---------------
 
 # library ---------------------

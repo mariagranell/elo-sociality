@@ -1,48 +1,40 @@
 # ---------------
 # Title: Sociality CSI
-# Date: 18 Sep 2023
+# Date: 21 May 2024
 # Author: mgranellruiz
 # Disclaimer: This script was created follwing two scrips created by Josefien Tankink
 # Goal: Calculate centrality of individuals in the social network. That is NOT about DSI or particular friendships.
 # ultimately find a single number (or two) that represents the social integration of an individual in a group.
+# for the darting of 2023 I will take data for the ranking and the sociality vectors from 2022-07-01 until 2023-02-01.
+# for more information check the README of combination darting
 # ---------------
 
 # library ---------------------
-library(lubridate) #
-library(hms) #
-library(dplyr) #
-library(ggplot2)
-library(lme4)
-library(ggstatsplot)
-library(fitdistrplus)
-library(gamlss)
-library(ggside)
-library(ggpubr)
-library(stringr) #
-library(gridExtra)
-library(ggtext)
-library(forcats)
-library(tidyr) #
-library(patchwork)
+library(lubridate)
+library(hms)
+library(dplyr)
+library(stringr)
+library(tidyr)
 source('/Users/mariagranell/Repositories/data/functions.R')
-library(tibble)
+
 
 # path ------------------------
-setwd('/Users/mariagranell/Repositories/elo-sociality/sociality')
+setwd('/Users/mariagranell/Repositories/elo-sociality/sociality/darting2023')
 
 # social data ------------------------
-social <- read.csv('/Users/mariagranell/Repositories/elo-sociality/data/Social_10.2021-05.2022.csv')
+social <- read.csv('/Users/mariagranell/Repositories/elo-sociality/data/darting2023/combinedAffiliative_2022-06_2023-12.csv')
 
 #### CREATING *AD-LIB* CSI FILE ####
 
 ss <- social %>%
-  mutate(Date = as.character(mdy(Date))) %>%
+  mutate(Date = as.character(ymd(Date))) %>%
   filter(
-    # Select the study period of the first darting
-    Date > "2021-10-01" & Date < "2022-06-01"
+    # Select the study period of the second darting
+    Date > "2022-07-01" & Date < "2023-02-01"
   ) %>%
   pivot_longer(cols = starts_with("Remarks"), names_to = "RemarksColumn") %>%
   filter(
+    # remove affiliative interactions in odd context
     !grepl("bge|bgs|nge|encounter|bgr|wgc", tolower(value)), # bge
     !grepl("bge|bgs|nge|encounter|bgr|wgc|bgd", tolower(Context)), # bge in context
     !grepl("experiment|xp|box|touchscreen|pattern", tolower(value)), # experiments
