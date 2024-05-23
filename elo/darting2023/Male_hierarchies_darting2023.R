@@ -11,6 +11,147 @@ library(dplyr)
 library(lubridate)
 source("/Users/mariagranell/Repositories/data/functions.R")
 
+#### CREATING *FOCAL* ELO FILE ####
+focal <- read.csv("/Users/mariagranell/Repositories/elo-sociality/data/darting2023/combinedFocal_2022-06_2023-5.csv")
+
+fo <- focal %>%
+  mutate(Date = as.character(ymd(Date))) %>%
+  mutate_all(~na_if(., "")) %>%
+  filter(
+    # Select the study period of the second darting
+    Date > "2022-07-01" & Date < "2023-02-01",
+    # remove when is in context interobs
+    Interobs != "Yes",
+    # select only affiliative interactions
+    Behaviour == "Agonistic"
+    )
+# ignore obs.nr
+
+# Make the focal data into individual df -------
+
+# The dataframe fo12 only has 1 collumn of behaviour
+# thus is different how to decide the winner and loser
+fo12 <- fo %>% dplyr::select(Date, Time, Group, IDIndividual1, BehaviourFocal,IDIndividual2,Remarks)
+
+# however all these combinations of behaviours can be united with the regular adlib agonistic file, check below
+{fo1red <- fo %>% # focal redirects to someone
+  filter(AgonisticInteraction == "Focal Redirects") %>%
+  dplyr::select(Date, Time, Group, IDIndividual1, RedirectionBehaviour,IDRedirection, VictimRedResponse,Remarks) %>%
+  rename(BehaviourIndiv1 = RedirectionBehaviour, IDIndividual2 = IDRedirection, BehaviourIndv2 = VictimRedResponse)
+foSupFoc <- fo %>% # A supporter aids the focal
+  filter(AgonisticInteraction == "Support to Focal") %>%
+  dplyr::select(Date, Time, Group, IDSupporters, SupportersBehaviour,IDIndividual2, VictimSupResponse,Remarks) %>%
+  rename(IDIndividual1 = IDSupporters, BehaviourIndiv1 = SupportersBehaviour, BehaviourIndv2 = VictimSupResponse) %>%
+  split_behaviours("IDIndividual1", ";") %>% distinct(.) # ignore warnings
+foSupPar <- fo %>% # A supporter aids the parner
+  filter(AgonisticInteraction == "Support to Partner") %>%
+  dplyr::select(Date, Time, Group, IDSupporters, SupportersBehaviour,IDIndividual1, VictimSupResponse,Remarks) %>%
+  rename(IDIndividual1 = IDSupporters, BehaviourIndiv1 = SupportersBehaviour, IDIndividual2 = IDIndividual1, BehaviourIndv2 = VictimSupResponse) %>%
+  split_behaviours("IDIndividual1", "; ") %>% distinct(.) # ignore warnings
+
+fo_2behav <- rbind(fo1red,foSupFoc,foSupPar) %>%
+  # remove interactions with lac of information
+  filter(!is.na(IDIndividual1), !is.na(IDIndividual2),
+         !str_detect(IDIndividual1, regex("unk", ignore_case = TRUE)),
+         !str_detect(IDIndividual2, regex("unk", ignore_case = TRUE)))
+
+rm(fo1red,foSupFoc,foSupPar,foa)}
+
+# scans data -------------------
+scans <- read.csv('/Users/mariagranell/Repositories/elo-sociality/data/darting2023/combinedScan_2022-06_2023-5.csv')
+
+# Select the study period of the first darting
+sc <- scans %>%
+  mutate(Date = as.character(ymd(Date))) %>%
+  filter(
+    # Select the study period of the second darting
+    Date > "2022-07-01" & Date < "2023-02-01",
+    # Select only agonistic behaviours
+    Behaviour == "Agonistic") %>%
+  # select the same collumns as fo12 to merge
+  rename(BehaviourFocal = BehaviourType, IDIndividual2 = IDPartners) %>%
+  dplyr::select(Date,Time,Group, IDIndividual1,BehaviourFocal,IDIndividual2,Remarks)
+
+
+#### Winner/loser for Focal and Scan data ####
+
+# this file has to have Date,Time,Group, IDIndividual1,BehaviourFocal,IDIndividual2,Remarks
+df_fosc <- rbind(fo12,sc)
+
+# In order to add the social rank of initiators & targets and thus get their social rank differences,
+# we first need decide a clear winner (defined as the individual being the most aggressive, i.e. who used the most
+# intense aggressive behaviour and a clear loser (defined as the individual showing the most submissive behaviours and/or
+# ending the conflict by moving away from the opponent.
+
+# First definitions of the beahviours:
+focal_loser_beh <- c('fl', 'rt', 'av', 'ja', 'cr', 'ss', 'gu', 'le','sc')
+partner_loser_beh <- paste0("b", focal_loser_beh)
+focal_winner_beh <- list(cat_3=c('bi', 'gb', 'hi', 'fi', 'hh', 'so'), # most aggressive
+                         cat_2=c('ch', 'st', 'tp','at'),
+                         cat_1=c('ac', 'dp', 'su', 'fh', 'sf', 'bd', 'hb',
+                                 'ap', 'ap0', 'ap1', 'ap2', 'ap3', 'ap5', # we consider ap and wb from 5 to 0
+                                 'wb', 'wb0', 'wb1', 'wb2', 'wb3', 'wb5')) # least aggressive
+partner_winner_beh <- lapply(focal_winner_beh, function(x) paste0("b", x))
+
+### Write a function to decide for each obs who is the winner (decide_winner) based on categories of behaviours specific to vic or agg
+# to determine a winner we will do it based on instensity. That is, Higher intensity (cat_3) behaviors have the first opportunity to determine the winner.
+# If the counts are equal in cat_3, we will consider the counts in cat_2 until we reach retreat behaviours.
+# This gives a natural precedence to more intense behaviors.
+# In the end we want to end up with Date, Time, Group, winner, loser columns
+
+# Sample data. Useful to understand the code
+#df_fosc <- data.frame(strings = c("bhi.fl.rt bch", "ch.hi.at brt.ble", "fl.bfl bi.bst", "bi bch.bat", "le", "bch.ch"),
+#                 IDIndividual1 = "a", IDIndividual2 = "b")
+
+# split the behaviours in a list
+df_fosc$splitbehaviour <- lapply(df_fosc$BehaviourFocal, function(x) unlist(strsplit(x, split = "[. ]")))
+
+# Function to count occurrences of behaviours in the list of winner or loser
+count_occurrences <- function(list_elem, focal_list) {
+  sum(sapply(list_elem, function(x) x %in% focal_list))
+}
+
+# Function to determine the winner based on hierarchical behavior categories
+decide_winner <- function(behaviors) {
+  points_focal <- 0
+  points_partner <- 0
+
+  # Evaluate categories in order of intensity
+  for (cat in c("cat_3", "cat_2", "cat_1")) {
+    points_focal <- count_occurrences(behaviors, focal_winner_beh[[cat]])
+    points_partner <- count_occurrences(behaviors, partner_winner_beh[[cat]])
+
+    if (points_focal > points_partner) return("focal")
+    if (points_partner > points_focal) return("partner")
+  }
+
+  # If still a draw, evaluate retreat behaviors
+  points_focal <- count_occurrences(behaviors, focal_loser_beh)
+  points_partner <- count_occurrences(behaviors, partner_loser_beh)
+
+  if (points_focal < points_partner) return("focal")
+  if (points_partner < points_focal) return("partner")
+
+  return("draw")
+}
+
+# Apply the decide_winner function to each row
+df_fosc <- df_fosc %>%
+  mutate(win_ID = sapply(splitbehaviour, decide_winner))
+
+# investigate the draws
+View(df_fosc %>% filter(win_ID == "draw"))
+# Clean the dataframe and assing te anmes of winners and losers
+df_fosc <- df_fosc %>% filter(win_ID != "draw") %>%
+  mutate(
+  winner = ifelse(win_ID == "focal", IDIndividual1, IDIndividual2),
+  loser = ifelse(win_ID != "focal", IDIndividual1, IDIndividual2),
+) %>% select(Date, Time, Group, winner, loser)
+
+
+
+
+#### CREATING *ADLIB* ELO FILE ####
 ## Load your data using the "Creating ago file"
 dd <- read.csv("/Users/mariagranell/Repositories/elo-sociality/data/FinalAgonistic.csv", header=TRUE, na.strings=c(""," ","NA")) %>%
   dplyr::select(-X)
@@ -36,6 +177,12 @@ d <- na.omit(d)
 d$AggressorBehaviour <- tolower(d$AggressorBehaviour)
 d$VictimBehaviour <- tolower(d$VictimBehaviour)
 
+# unite the data from focal files
+d <- d %>% rbind(fo_2behav %>%
+                        rename(Aggressor = IDIndividual1, AggressorBehaviour = BehaviourIndiv1,
+                               Victim = IDIndividual2, VictimBehaviour = BehaviourIndv2) %>%
+                        dplyr::select(-Remarks))
+
 
 #### Winner/loser ####
 ## Written by Stephanie Mercier ##
@@ -51,7 +198,6 @@ d$VictimBehaviour <- tolower(d$VictimBehaviour)
 # and a clear loser (defined as the individual showing the most submissive behaviours and/or 
 # ending the conflict by moving away from the opponent -> rt,av,fl,le,re,ja,cr). 
 
-fight.data <- d
 
 ### Write a function to decide for each obs who is the winner (decide.win) based on categories of behaviours specific to vic or agg
 # Victim = individual ending up the conflict being the loser, thus considered as the most submissive one
@@ -74,8 +220,8 @@ decide.win <- function(beh_x, beh_y) {
   # Count retreat behaviors
   for (beh_ in ret_beh) {
     # Match all occurrences of the behavior
-    x_matches <- gregexpr(beh_, beh_x)[[1]]
-    y_matches <- gregexpr(beh_, beh_y)[[1]]
+    x_matches <- gregexpr(beh_, beh_x)[[1]] # agressor
+    y_matches <- gregexpr(beh_, beh_y)[[1]] # victim
 
     # Filter out matches that are preceded by 'b', i.e. remove the passive actions, "being ..."
     x_filtered <- x_matches[x_matches != -1 & !sapply(x_matches, function(pos) substr(beh_x, pos-1, pos-1) == "b")]
@@ -201,6 +347,10 @@ str(d)
 d$winner <- as.character(d$winner)
 d$loser <- as.character(d$loser)
 
+# merge with the focal and scan data
+d <- d %>% select(Date, Time, Group, winner, loser) %>%
+  rbind(df_fosc)
+
 # change group names to short names
 d <- change_group_names(d,"Group")
 
@@ -307,7 +457,7 @@ df_M <- df %>% filter(AgeClassWinner %in% c("AM", "SM") & AgeClassLoser %in% c("
 # starting date: "2022-07-01", ending date "2023-01-31"
 
 # check which groups have enough observations for the data range
-df_F %>% group_by(Group) %>% summarize(n = n())
+df_M %>% group_by(Group) %>% summarize(n = n())
 # only Ak, Bd, Kb and Nh
 
 # Divide into groups

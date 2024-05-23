@@ -15,6 +15,9 @@ library(hms)
 library(dplyr)
 library(stringr)
 library(tidyr)
+library(forcats)
+library(ggplot2)
+library(patchwork)
 source('/Users/mariagranell/Repositories/data/functions.R')
 
 
@@ -48,9 +51,9 @@ ss <- social %>%
 
 # data cleaning -------
 # the unk male is Xin, Xai or Apa
-{ss[grepl("Xin", ss$OtherContext) & grepl("UnkAM", ss$IDIndividual2), "IDIDIndividual2"] <- "Xin"
-ss[grepl("UnkAM is Xai", ss$Remarks) & grepl("UnkAm", ss$IDIndividual1), "IDIDIndividual1"] <- "Xai"
-ss[grepl("unkAM is apa", ss$Remarks) & grepl("UnkAM", ss$IDIndividual1), "IDIDIndividual1"] <- "Apa"}
+{ss[grepl("Xin", ss$OtherContext) & grepl("UnkAM", ss$IDIndividual2), "IDIndividual2"] <- "Xin"
+ss[grepl("UnkAM is Xai", ss$Remarks) & grepl("UnkAm", ss$IDIndividual1), "IDIndividual1"] <- "Xai"
+ss[grepl("unkAM is apa", ss$Remarks) & grepl("UnkAM", ss$IDIndividual1), "IDIndividual1"] <- "Apa"}
 
 # Investigate the remarks and remove the ones that are uncertain
 #a <- as.data.frame(unique(s$RemarksE)) The ones that are left are ok
@@ -84,8 +87,8 @@ ss <- ss %>%
          !is.na(IDIndividual1), !is.na(IDIndividual2)) # if one of them is not entered
 
 # Split behaviours into rows ------- warnings are fine
-ss <- suppressWarnings(split_behaviours(ss, c("BehaviourIndiv1", "BehaviourIndiv2"), ' '))
-ss <- suppressWarnings(split_behaviours(ss, c("BehaviourIndiv1", "BehaviourIndiv2"), '.'))
+ss <- split_behaviours(ss, c("BehaviourIndiv1", "BehaviourIndiv2"), ' ')
+ss <- split_behaviours(ss, c("BehaviourIndiv1", "BehaviourIndiv2"), '.')
 
 # select behaviours to calculate the sociality
 ss <- ss %>%
@@ -135,9 +138,9 @@ for(i in seq_along(ss$BehaviourIndiv1)) {
 rm(i)
 ss <- ss %>% distinct() %>%
   dplyr::select(-matches("BehaviourIndiv|IDIndividual", ignore.case = FALSE)) %>%
-  # remove interactions in where babies or Unk individuals are involved
+  # remove interactions in where babies are involved, unk individuals are ok as long as they are not actor, see later
   filter(!grepl("BB|Unk", Actor),
-         !grepl("BB|Unk", Receiver)) %>%
+         !grepl("BB", Receiver)) %>%
   # remove interactions that are not in the affiliative behaviours
   filter(BehaviourActor %in% active_beh)
 
@@ -150,58 +153,93 @@ scans <- read.csv('/Users/mariagranell/Repositories/elo-sociality/data/darting20
 
 # Select the study period of the first darting
 scans <- scans %>%
-  mutate(Date = as.character(mdy(Date))) %>%
-  filter(Date > "2021-10-01" & Date < "2022-06-01",
-         !is.na(Time),
-         !str_detect(IDIndividual, "Unk|Baby")) %>%
-  mutate(Group = case_when( # there were some errors in the names
-      Group == "Noah" ~ "Noha",
-      Group == "Lemon Trmp.kept i.p" ~ "Lemon Tree",
-      Group == "Baie Dallies" ~ "Baie Dankie",
-      TRUE ~ Group  # Keep other values unchanged
-    )
-  )
+  mutate(Date = as.character(ymd(Date))) %>%
+  filter(
+    # Select the study period of the second darting
+    Date > "2022-07-01" & Date < "2023-02-01")
 
-# just make sc (usable version of sc) readable from the shitty pendragon
+# integrate the remarks
 {
-sc <- scans[,c(5:7,14:79)] %>% # remove all the shitty collumns you don´t care
-  dplyr::select(-matches("IB|IN|IC|Intaka|InBetweeners", ignore.case = FALSE)) %>%
-  dplyr::select(-matches("IF|Ifamily", ignore.case = FALSE)) # we were not collecting data on IF on that period
-
-# First subset
-ak <- sc %>% filter(Group == 'Ankhase') %>%
-  dplyr::select(-matches("BD|NH|KB|LT|CR", ignore.case = FALSE)) %>%
-  rename_with(~gsub("AK_", "", .), matches("^AK", ignore.case = FALSE))%>%
-  rename(AdultsIn2m = JuvenilesIn2mAK21, JuvsIn2m = JuvenilesIn2mAK2)
-
-bd <- sc %>% filter(Group == 'Baie Dankie') %>%
-  dplyr::select(-matches("AK|NH|KB|LT|CR", ignore.case = FALSE)) %>%
-  rename_with(~gsub("BD_|BD1|BD2", "", .), matches("BD", ignore.case = FALSE)) %>%
-  rename(JuvsIn2m = JuvenilesIn2m)
-
-nh <- sc %>% filter(Group == 'Noha') %>%
-  dplyr::select(-matches("AK|BD|KB|LT|CR", ignore.case = FALSE)) %>%
-  rename_with(~gsub("NH_|NH1|NH2", "", .), matches("NH", ignore.case = FALSE)) %>%
-  rename(JuvsIn2m = JuvenilesIn2m)
-
-kb <- sc %>% filter(Group == 'Kubu') %>%
-  dplyr::select(-matches("AK|BD|NH|LT|CR", ignore.case = FALSE)) %>%
-  rename_with(~gsub("KB_|KB1|KB2", "", .), matches("KB", ignore.case = FALSE)) %>%
-  rename(JuvsIn2m = JuvenilesIn2m)
-
-lt <- sc %>% filter(Group == 'Lemon Tree') %>%
-  dplyr::select(-matches("AK|BD|KB|NH|CR", ignore.case = FALSE)) %>%
-  rename_with(~gsub("LT_|LT1|LT2", "", .), matches("LT", ignore.case = FALSE)) %>%
-  rename(JuvsIn2m = JuvenilesIn2m)
-
-cr <- sc %>% filter(Group == 'Crossing') %>%
-  dplyr::select(-matches("AK|BD|KB|LT|NH", ignore.case = FALSE)) %>%
-  rename(JuvsIn2m = AdultsIn2mCR11) %>%
-  rename_with(~gsub("CR_|CR1|CR11", "", .), matches("CR", ignore.case = FALSE))
-
-sc <- ak %>% rbind(bd,nh,lt,kb,cr)
-rm(ak,bd,nh,lt,kb,cr)
+  # change the IDIndividual1
+scans[grepl("UnkJM i s Aaa", scans$Remarks), "IDIndividual1"] <- "Aaa"
+scans[grepl("unkAM is Xin", scans$Remarks), "IDIndividual1"] <- "Xin"
+scans[grepl("unkAM is kno", scans$Remarks), "IDIndividual1"] <- "Kno"
+scans[grepl("unkAM is Cairo", scans$Remarks), "IDIndividual1"] <- "Cai"
+scans[grepl("Oke", scans$Remarks), "IDIndividual1"] <- "Oke"
+scans[grepl("Hav", scans$Remarks), "IDIndividual1"] <- "Hav"
+scans[grepl("apa", scans$Remarks), "IDIndividual1"] <- "Apa"
+scans[grepl("Aaa", scans$Remarks), "IDIndividual1"] <- "Aaa"
+  # change the juvenile
+scans[grepl("Aaa is juv|AAA juv", scans$Remarks), "NNJuvenile"] <- "Aaa"
+  scans[grepl("aal nearest jv", scans$Remarks), "NNJuvenile"] <- "Aal"
+  scans[grepl("Aar is juv|Aar juv|uv is Aar", scans$Remarks), "NNJuvenile"] <- "Aar"
+  scans[grepl("AAT is juv|AAT juv|juv is aat", scans$Remarks), "NNJuvenile"] <- "Aat"
+  scans[grepl("cay is nearest juv", scans$Remarks), "NNJuvenile"] <- "Cay"
+  scans[grepl("dalt is nearest jv", scans$Remarks), "NNJuvenile"] <- "Aaa"
+  scans[grepl("gil nearest juv", scans$Remarks), "NNJuvenile"] <- "Gil"
+  scans[grepl("Gree juv", scans$Remarks), "NNJuvenile"] <- "Gree"
+  scans[grepl("Gri juv", scans$Remarks), "NNJuvenile"] <- "Gri"
+  scans[grepl("juv is Yelo|Juv is yelo|uv is Yelo", scans$Remarks), "NNJuvenile"] <- "Yelo"
+  scans[grepl("juv Roc", scans$Remarks), "NNJuvenile"] <- "Roc"
+  scans[grepl("juv uls", scans$Remarks), "NNJuvenile"] <- "Uls"
+  scans[grepl("Juv Xop", scans$Remarks), "NNJuvenile"] <- "Xop"
+  # there are more but I give up, I am not that instrested in the juveniles
+  # change the parners
+  scans[grepl("Yuko is partner", scans$Remarks), "IDPartners"] <- "Yuko"
+  scans[grepl("Xinp is partner", scans$Remarks), "IDPartners"] <- "Xinp"
+  scans[grepl("Uls partner", scans$Remarks), "IDPartners"] <- "Uls"
+  scans[grepl("Tev is partner", scans$Remarks), "IDPartners"] <- "Tev"
+  scans[grepl("Part partner", scans$Remarks), "IDPartners"] <- "Prat"
+  scans[grepl("Gris is partner", scans$Remarks), "IDPartners"] <- "Gris"
+  scans[grepl("Gri partner", scans$Remarks), "IDPartners"] <- "Gri"
+  scans[grepl("Gale partner", scans$Remarks), "IDPartners"] <- "Gale"
+  # change UnkAM and UnkAF
+  scans[grepl("UnkAM-Oke", scans$Remarks), "IndArmLength"] <- "Oke"
+  scans[grepl("UnkAM-Oke", scans$Remarks), "NNAdult"] <- "Oke"
+  scans[grepl("UnkAM is NHNewMale0622", scans$Remarks), "NNAdult"] <- "NHNewMale0622"
+  scans[grepl("UnkAF is Xinp", scans$Remarks), "NNAdult"] <- "Xinp"
+  scans[grepl("UnkAF is Beir", scans$Remarks), "NNAdult"] <- "Beir"
+  scans[grepl("unkAM is Xin", scans$Remarks), "NNAdult"] <- "Xin"
+  scans[grepl("unkAM is Tedd", scans$Remarks), "NNAdult"] <- "Ted"
+  scans[grepl("unkAM is Tedd", scans$Remarks), "IndArmLength"] <- "Oke"
+  scans[grepl("unkAM is Ryan", scans$Remarks), "NNAdult"] <- "Rya"
 }
+
+# remove Interobs obs and select collumns
+sc <- scans %>% filter(InterObs == "No") %>%
+  dplyr::select(Date, Time, Group, IDIndividual1, Behaviour, BehaviourType,
+                IDPartners,NNAdult,DistanceNNA,NNJuvenile,DistanceNNJ,
+                NbNeighbours10m,IndArmLength,Ind2m,Ind5m)
+
+# remove duplicates, i.e. if Yuko has been named as IDPartners remove from NNAdult, NNJuveline, IndArmLenght, Ind2m, Ind5m
+replace_patterns_row <- function(df) {
+  for (i in seq_len(nrow(df))) {
+    if (!is.na(df$IDPartners[i])) {
+      pattern <- df$IDPartners[i]
+      df$NNAdult[i] <- sub(pattern, "", df$NNAdult[i])
+      df$NNJuvenile[i] <- sub(pattern, "", df$NNJuvenile[i])
+      df$IndArmLength[i] <- sub(pattern, "", df$IndArmLength[i])
+      df$Ind2m[i] <- sub(pattern, "", df$Ind2m[i])
+      df$Ind5m[i] <- sub(pattern, "", df$Ind5m[i])
+    }
+
+    if (!is.na(df$NNAdult[i])) {
+      pattern <- df$NNAdult[i]
+      df$IndArmLength[i] <- sub(pattern, "", df$IndArmLength[i])
+      df$Ind2m[i] <- sub(pattern, "", df$Ind2m[i])
+      df$Ind5m[i] <- sub(pattern, "", df$Ind5m[i])
+    }
+
+    if (!is.na(df$NNJuvenile[i])) {
+      pattern <- df$NNJuvenile[i]
+      df$IndArmLength[i] <- sub(pattern, "", df$IndArmLength[i])
+      df$Ind2m[i] <- sub(pattern, "", df$Ind2m[i])
+      df$Ind5m[i] <- sub(pattern, "", df$Ind5m[i])
+    }
+  }
+  return(df)
+}
+scans <- replace_patterns_row(scans)
 
 # create obs number
 obs.nr <- 1
@@ -221,28 +259,148 @@ for(i in seq_along(sc$Date)){
 rm(time0, time1, timeinterval,obs.nr,i)
 
 # separate observed IDIndividuals
-cols <- c("AdultsIn1m", "JuvsIn1m", "AdultsIn2m", "JuvsIn2m", "AdultsIn5m","JuvsIn5m")
-sc <- sc %>% split_behaviours(cols, ";")%>% distinct()
+cols <- c("IndArmLength", "Ind2m", "Ind5m")
+sc <- sc %>% split_behaviours(cols, ";")%>% distinct() # ignore warning
 
 # make it in long format ------
-cols <- c("AdultsIn1m", "JuvsIn1m", "AdultsIn2m", "JuvsIn2m", "AdultsIn5m","JuvsIn5m", "NearestNeighbour", "NearestJuvenileNeighbour")
+cols <- c("NNAdult","NNJuvenile","IndArmLength", "Ind2m", "Ind5m")
 sc <- sc %>% pivot_longer(cols, values_to = "neighbour", names_to = "distance") %>%
-  distinct()%>% filter(!is.na(neighbour), !str_detect( neighbour, "Unk|Baby|adult")) %>%
+  distinct()%>% mutate(neighbour = na_if(neighbour, "")) %>% # make empty entries NA
+  filter(!is.na(neighbour), !str_detect( neighbour, "BB")) %>% # remove BB (babies)
   rowwise() %>%
-  mutate(dyad = paste(sort(c(IDIndividual, neighbour)), collapse = '-'))
+  mutate(dyad = paste(sort(c(IDIndividual1, neighbour)), collapse = '-')) # create a dyad collumn
 rm(cols)
 
 # Remove duplicates
 # If two IDIndividuals are scanned within 10 mins of each other both and both have the same network
 # is important to one of the observations beacuse they are not independent
-sc <- sc %>%
+sca <- sc %>%
   group_by(Obs.nr, dyad) %>%
-  filter(!(n() > 1 & any(!str_detect(distance, "Near"))) | !str_detect(distance, "Near")) %>%
+  filter(!(n() > 1 & any(!str_detect(distance, "NN"))) | !str_detect(distance, "NN")) %>%
   ungroup()
+
+#### CREATING *FOCAL* CSI FILE ####
+focal <- read.csv("/Users/mariagranell/Repositories/elo-sociality/data/darting2023/combinedFocal_2022-06_2023-5.csv")
+
+fo <- focal %>%
+  mutate(Date = as.character(ymd(Date))) %>%
+  mutate_all(~na_if(., "")) %>%
+  filter(
+    # Select the study period of the second darting
+    Date > "2022-07-01" & Date < "2023-02-01",
+    # remove when is in context interobs
+    Interobs != "Yes",
+    # select only affiliative interactions
+    Behaviour == "Affiliative"
+    ) %>%
+  # select the collumns of interest for affilitavie
+  dplyr::select(Date, Time, Group,IDIndividual1, BehaviourFocal, IDIndividual2,
+                BehaviourFocal2, IDIndividual3,
+                BehaviourFocal3, IDIndividual4,
+                Remarks)
+
+# assume remarks
+# ignore making a proper obs number
+fo$Obs.nr <- 1
+
+# combine behaviours into long format
+{fo12 <- fo %>% dplyr::select(Date, Time, Group,IDIndividual1, BehaviourFocal, IDIndividual2, Obs.nr)
+fo13 <- fo %>% dplyr::select(Date, Time, Group,IDIndividual1, BehaviourFocal2, IDIndividual3, Obs.nr) %>%
+  rename(BehaviourFocal = BehaviourFocal2, IDIndividual2 = IDIndividual3)
+fo14 <- fo %>% dplyr::select(Date, Time, Group,IDIndividual1, BehaviourFocal3, IDIndividual4, Obs.nr) %>%
+  rename(BehaviourFocal = BehaviourFocal3, IDIndividual2 = IDIndividual4)
+
+fo <- rbind(fo12,fo13,fo14)
+rm(fo12,fo13,fo14)}
+
+# Clean the file
+fo <- fo %>% mutate(BehaviourFocal = tolower(BehaviourFocal)) %>%
+  filter(!is.na(BehaviourFocal), # if there is no behaviour not intrested
+         !str_detect(IDIndividual2, regex("BB")))
+
+# separate observed IDIndividuals
+fo <- fo %>% # ignore warnings
+  split_behaviours("BehaviourFocal", ".") %>%
+  distinct()
+
+# Create actors and recievers ----
+# because of the behaviours that we selected sometimes there is no directionality
+# for instance pl or sg. Since we are going to use undirected networks to caluclate sociality
+# it dosen´t matter much, that is as long as they interacted we counted. Regardless of the direction.
+
+active_beh <- c('gr', 'sg', 'sw', 'em', 'pl') # affiliative active behaviours
+passive_beh <- c('bgr', 'bsg', 'bsw', 'bem') # passive affiliative behaviours
+
+# determine actors ID.
+fo <- fo %>%
+  mutate(
+    Actor = case_when(
+      BehaviourFocal %in% active_beh ~ IDIndividual1,
+      BehaviourFocal %in% passive_beh ~ IDIndividual2,
+      TRUE ~ NA_character_
+    ),
+    Receiver = case_when(
+      BehaviourFocal %in% active_beh ~ IDIndividual2,
+      BehaviourFocal %in% passive_beh ~ IDIndividual1,
+      TRUE ~ NA_character_
+    ),
+    BehaviourActor = ifelse(BehaviourFocal %in% c(active_beh, passive_beh), BehaviourFocal, NA_character_)
+  )
+
+# remove the passive behaviours
+fo <- fo %>%
+  mutate(BehaviourFocal = str_replace_all(BehaviourFocal, "b", ""),
+         Source = "focal") %>%
+  dplyr::select(-IDIndividual1, -IDIndividual2, -BehaviourFocal) %>%
+  rename(Behaviour = BehaviourActor) %>%
+  na.omit()
+
+#### COMBINE THE ADLIB, SCANS AND FOCAL FILES ####
+
+# changing scans data to have Date, Time, Group, Actor, Receiver, BehaviourActor
+sca <- sc %>% mutate(Source = "scan") %>%
+  dplyr::select(Group, Date, Time, Obs.nr, IDIndividual1, neighbour, distance, Source) %>%
+  rename(Actor = IDIndividual1,
+         Receiver = neighbour,
+         Behaviour = distance
+  )
+
+# merge adlib (ss), scans (sca) and focal (fo) data
+ssc <- ss %>% mutate(Source = "adlib") %>%
+  dplyr::select(Group, Date, Time, Obs.nr, Actor, Receiver, BehaviourActor, Source) %>%
+  rename(Behaviour = BehaviourActor) %>%
+  rbind(., sca, fo) %>%
+  mutate(Focal = Actor) %>%
+  # do some cleaning, remove unk and NA in the focal
+  filter(!str_detect(Focal, regex("Unk"))) %>%
+  na.omit()
+rm(sca)
+
+## MERGE WITH LH TO CHANGE THE NAME OF MALES ####
+
+# Create a lookup table with lh
+# I selected only AnimalName and OtherID and concatenated to end up with only 1 collumn of weird names called focal
+lookup <- read.csv2("/Users/mariagranell/Repositories/elo-sociality/data/darting2023/factchecked_LH_171123.csv") %>%
+  dplyr::select(AnimalCode, AnimalName) %>% distinct() %>% rename(OtherID = AnimalName) %>%
+  rbind(.,read.csv2("/Users/mariagranell/Repositories/elo-sociality/data/darting2023/factchecked_LH_171123.csv") %>%
+  dplyr::select(AnimalCode, OtherID) %>% distinct() )
+
+# Replace misspelled names in ssc$Focal with correct names using the lookup table
+ssc <- ssc %>%
+    left_join(lookup, by = c("Focal" = "OtherID")) %>%
+    mutate(Focal = if_else(is.na(AnimalCode), Focal, AnimalCode),
+         Actor = Focal) %>%
+    select(-AnimalCode) %>%
+    left_join(lookup, by = c("Receiver" = "OtherID")) %>%
+    mutate(Receiver = if_else(is.na(AnimalCode), Receiver, AnimalCode)) %>%
+    select(-AnimalCode)
+
+#View(ssc%>% anti_join(lookup, by = c("Focal" = "AnimalCode")))
+
 
 #### SOCIAL BONDS PACKAGE ########
 # To create a file for the social bonds package you have:
-# A file with behaviour. That contains the collumns: Date, Actor, Reciever and Behaviour
+# A file with behaviour. That contains the collumns: Date, Time, Group, Actor, Receiver, Behaviour
 # scans data can be modified in where proximity can be describes as a behaviour. i.e. proox1m, prox5m...
 
 # it dosent include presence data. worrying? not sure
@@ -251,35 +409,13 @@ sc <- sc %>%
 ?socialindices2::CSI()
 library(socialindices2)
 
-#### COMBINE THE ADLIB AND SCANS FILES ####
-
-# changing scans data to have Date, Actor, Reciever and Behaviour
-sca <- sc %>% mutate(Source = "scan") %>%
-  dplyr::select(Group, Date, Time, Obs.nr, IDIndividual, neighbour, distance, Source) %>%
-  rename(Actor = IDIndividual,
-         Receiver = neighbour,
-         Behaviour = distance
-  )
-
-# merge both
-{ssc <- ss %>% mutate(Source = "adlib") %>%
-  dplyr::select(Group, Date, Time, Obs.nr, Actor, Receiver, BehaviourActor, Source) %>%
-  rename(Behaviour = BehaviourActor) %>%
-  mutate(Group = ifelse(Group == "Crossing,", "Crossing", Group)) %>%
-  rbind(., sca) %>%
-  mutate(Focal = Actor) %>%
-  filter(Behaviour != "bagr")
-rm(sca)}
-
-ssc%>% group_by(Group) %>% summarize(n = n())
+ssc %>% group_by(Group) %>% summarize(n = n())
+# CR and IF don´t have enough data to do CSI
 
 ### perform CSI ###
-{
-  simplified_behaviours <- list(proximity=c("NearestJuvenileNeighbour", "NearestNeighbour","AdultsIn1m","JuvsIn1m", "sg","sw"
-                              ,"AdultsIn2m","JuvsIn2m"
-                              ,"AdultsIn5m","JuvsIn5m"),
-                              social=c("gr","em","pl", "bgr","bem")
-  )
+{ simplified_behaviours <- list(
+    proximity=c("NNJuvenile", "NNAdult","Ind2m","Ind5m", "sg","bsg","sw", "bsw", "IndArmLength"),
+    social=c("gr","em","pl", "bgr","bem"))
 
 # AK --------
 csiak <- ssc %>% filter(Group == "Ankhase") %>%
@@ -336,28 +472,17 @@ lt <- csilt %>%
   geom_point()+
   labs(title ="LT")
 
-# CR ------------
-csicr <- ssc %>% filter(Group == "Crossing") %>%
-  CSI(., duration.NA.treatm = "count", behaviours = simplified_behaviours)%>%
-  mutate(group = "CR")
-
-cr <- csicr %>%
-  mutate(focal2 = fct_reorder(focal, CSI)) %>%
-  ggplot(., aes(y = focal2, x =  zCSI)) +
-  geom_point() +
-  labs(title ="CR")
 
 nh + bd + ak +
-kb + lt + cr
-
-  rm(nh,bd,ak,cr,lt,kb, simplified_behaviours)
+kb + lt
 }
+rm(nh,ak,bd,lt,kb)
 
 # merge the CSI.
-csiall <- csiak %>% rbind(csibd,csikb,csilt,csinh, csicr)
-rm(csiak,csibd,csicr,csikb,csilt,csinh)
+csiall <- csiak %>% rbind(csibd,csikb,csilt,csinh)
+rm(csiak,csibd,csikb,csilt,csinh)
 
-#write.csv(csiall, '/Users/mariagranell/Repositories/elo-sociality/sociality/CSI_oct2021-june2022.csv', row.names = F)
+#write.csv(csiall, '/Users/mariagranell/Repositories/elo-sociality/sociality/darting2023/CSI_jun2022-jan2023.csv', row.names = F)
 
 ############ FIRST ################
 
