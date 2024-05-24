@@ -76,7 +76,9 @@ sc <- scans %>%
 #### Winner/loser for Focal and Scan data ####
 
 # this file has to have Date,Time,Group, IDIndividual1,BehaviourFocal,IDIndividual2,Remarks
-df_fosc <- rbind(fo12,sc)
+df_fosc <- rbind(fo12,sc) %>%
+  mutate_all(~ na_if(., "")) %>%  # make sure empty means NA
+  filter(!is.na(IDIndividual1), !is.na(IDIndividual2), !is.na(BehaviourFocal)) # remove all NA from these collumns
 
 # In order to add the social rank of initiators & targets and thus get their social rank differences,
 # we first need decide a clear winner (defined as the individual being the most aggressive, i.e. who used the most
@@ -113,6 +115,7 @@ count_occurrences <- function(list_elem, focal_list) {
 
 # Function to determine the winner based on hierarchical behavior categories
 decide_winner <- function(behaviors) {
+  behaviors <- unlist(behaviors)  # Ensure behaviors is a vector
   points_focal <- 0
   points_partner <- 0
 
@@ -198,6 +201,7 @@ d <- d %>% rbind(fo_2behav %>%
 # and a clear loser (defined as the individual showing the most submissive behaviours and/or 
 # ending the conflict by moving away from the opponent -> rt,av,fl,le,re,ja,cr). 
 
+fight.data <- d
 
 ### Write a function to decide for each obs who is the winner (decide.win) based on categories of behaviours specific to vic or agg
 # Victim = individual ending up the conflict being the loser, thus considered as the most submissive one
@@ -357,7 +361,7 @@ d <- change_group_names(d,"Group")
 ## Link life history to individuals #### # modified to use dplyr
 
 # Import data
-LHdata <- read.csv2("/Users/mariagranell/Repositories/data/life_history/tbl_Creation/TBL/factchecked_LH_171123.csv", header = T, stringsAsFactors = F, na.strings = c('NA', 'Not yet')) %>%
+LHdata <- read.csv2("/Users/mariagranell/Repositories/elo-sociality/data/darting2023/factchecked_LH_171123.csv", header = T, stringsAsFactors = F, na.strings = c('NA', 'Not yet')) %>%
     # add info that I am missing
   mutate(Sex = case_when(
     AnimalCode == "Kom" ~ "M",
@@ -412,12 +416,12 @@ d <- d %>%
 
 # lh for the winner:
 lh_winner <-LHdata %>%
-  dplyr::select(AnimalCode, Sex, DOB_estimate, FirstDate, StartDate_mb, Group_mb, OtherID) %>%
+  dplyr::select(AnimalCode, Sex, DOB_estimate, FirstDate, StartDate_mb, Group_mb) %>%
   rename(WinnerSex = Sex, DOBAgg = DOB_estimate, FRAgg = FirstDate, DIAgg = StartDate_mb, GpAgg = Group_mb)
 
 # lh for the loser:
 lh_loser <-LHdata %>%
-  dplyr::select(AnimalCode, Sex, DOB_estimate, FirstDate, StartDate_mb, Group_mb, OtherID) %>%
+  dplyr::select(AnimalCode, Sex, DOB_estimate, FirstDate, StartDate_mb, Group_mb) %>%
   rename(LoserSex = Sex, DOBVic = DOB_estimate, FRVic = FirstDate, DIVic = StartDate_mb, GpVic = Group_mb)
 
 join_d2 <- d %>%
@@ -429,7 +433,7 @@ join_d2 <- d %>%
   mutate(WinnerAge = add_age(DOBAgg, Date, "Years"),
          LoserAge = add_age(DOBVic, Date, "Years"))
 
-df <- join_d2 %>% select(Date, Time, Group, winner, BehaviourW, loser, BehaviourL, WinnerSex, WinnerAge, LoserSex, LoserAge)
+df <- join_d2 %>% select(Date, Time, Group, winner, loser, WinnerSex, WinnerAge, LoserSex, LoserAge)
 
 # Adfdf AgeClass column to the dfataframe pdf
 df$AgeClassWinner <- get_age_class(df$WinnerSex, df$WinnerAge)
@@ -437,9 +441,12 @@ df$AgeClassLoser <- get_age_class(df$LoserSex, df$LoserAge)
 
 # Investigate NA ####
 
+# NewMale110622 is Haw
+df <-df %>% mutate_all(~ ifelse(. == "NewMale110622", "Haw", .))
+
 # winner and loser, only Ves, Yam and Yub are missing, I decide to take the loses. If they are from CR or IF or juveniles
 # since we will delte them later
-a <- join_d2 %>%
+a <- df %>%
    filter(is.na(LoserAge)) %>%
   distinct(loser)
 
@@ -461,10 +468,10 @@ df_M %>% group_by(Group) %>% summarize(n = n())
 # only Ak, Bd, Kb and Nh
 
 # Divide into groups
-BD <- subset(df_F,df_F$Group == ("BD"))
-NH <- subset(df_F,df_F$Group == ("NH"))
-KB <- subset(df_F,df_F$Group == ("KB"))
-AK <- subset(df_F,df_F$Group == ("AK"))
+BD <- subset(df_M,df_M$Group == ("BD"))
+NH <- subset(df_M,df_M$Group == ("NH"))
+KB <- subset(df_M,df_M$Group == ("KB"))
+AK <- subset(df_M,df_M$Group == ("AK"))
 
 
 # check which groups have enough data
@@ -518,14 +525,14 @@ summary(BDamELO)
 # starting date: "2022-07-01", ending date "2023-01-31"
 # Define the starting dates and corresponding names
 date_ranges <- list(
-  c("jun", "2022-07-07"), #adjusted for BD
+  c("jun", "2022-07-04"), #adjusted for BD
   c("jul", "2022-08-01"),
   c("aug", "2022-09-01"),
   c("sep", "2022-10-01"),
   c("oct", "2022-11-01"),
   c("nov", "2022-12-01"),
   c("dec", "2023-01-01"),
-  c("jan", "2023-01-31") # we includde january as a month for the hair to grow
+  c("jan", "2023-01-30") # we includde january as a month for the hair to grow
 )
 
 # Initialize an empty data frame
@@ -571,14 +578,14 @@ eloplot(AKamELO)
 
 # Define the starting dates and corresponding names
 date_ranges <- list(
-  c("jun", "2022-07-06"), #adjusted for AK
+  c("jun", "2022-07-07"), #adjusted for AK
   c("jul", "2022-08-01"),
   c("aug", "2022-09-01"),
   c("sep", "2022-10-01"),
   c("oct", "2022-11-01"),
   c("nov", "2022-12-01"),
   c("dec", "2023-01-01"),
-  c("jan", "2023-01-30") # we includde january as a month for the hair to grow
+  c("jan", "2023-01-31") # we includde january as a month for the hair to grow
 )
 
 # Initialize an empty data frame
@@ -626,7 +633,7 @@ date_ranges <- list(
   c("oct", "2022-11-01"),
   c("nov", "2022-12-01"),
   c("dec", "2023-01-01"),
-  c("jan", "2023-01-31") # we includde january as a month for the hair to grow
+  c("jan", "2023-01-28") # we includde january as a month for the hair to grow
 )
 
 # Initialize an empty data frame
@@ -673,14 +680,14 @@ eloplot(KBamELO)
 
 # Define the starting dates and corresponding names
 date_ranges <- list(
-  c("jun", "2022-07-13"), #adjusted for KB
+  c("jun", "2022-07-01"), #adjusted for KB
   c("jul", "2022-08-01"),
   c("aug", "2022-09-01"),
   c("sep", "2022-10-01"),
   c("oct", "2022-11-01"),
   c("nov", "2022-12-01"),
   c("dec", "2023-01-01"),
-  c("jan", "2023-01-26") # we includde january as a month for the hair to grow
+  c("jan", "2023-01-30") # we includde january as a month for the hair to grow
 )
 
 # Initialize an empty data frame
@@ -737,11 +744,11 @@ GP_rank2 <- GP_rank %>%
   slice(1) %>% select(!range_numeric)
 
 # Change for Males or Females
-#write.csv(GP_rank2, "/Users/mariagranell/Repositories/elo-sociality/elo/darting2023/Rank_Females_jun2022-jan2023.csv", row.names = F)
+#write.csv(GP_rank2, "/Users/mariagranell/Repositories/elo-sociality/elo/darting2023/Rank_Males_jun2022-jan2023.csv", row.names = F)
 
 # Combine males and females hierarchies ---------
-f <- read.csv("/Users/mariagranell/Repositories/elo-sociality/elo/darting2023/Rank_Females_jun2022-jan2023")
-m <- read.csv("/Users/mariagranell/Repositories/elo-sociality/elo/darting2023/Rank_Males_jun2022-jan2023")
+f <- read.csv("/Users/mariagranell/Repositories/elo-sociality/elo/darting2023/Rank_Females_jun2022-jan2023.csv")
+m <- read.csv("/Users/mariagranell/Repositories/elo-sociality/elo/darting2023/Rank_Males_jun2022-jan2023.csv")
 f$Sex <- "female"
 m$Sex <- "male"
 combined <- f %>% rbind(.,m)
