@@ -7,7 +7,7 @@ library(dplyr)
 source("/Users/mariagranell/Repositories/data/functions.R")
 
 ## Load your data using the "Creating ago file"
-d <- read.csv("/Users/mariagranell/Repositories/elo-sociality/FinalAgonistic.csv", header=TRUE, na.strings=c(""," ","NA"))
+d <- read.csv("/Users/mariagranell/Repositories/elo-sociality/data/FinalAgonistic.csv", header=TRUE, na.strings=c(""," ","NA"))
 
 ## Assumptions Elo-rating package:
 # File is ordered by date

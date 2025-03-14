@@ -23,72 +23,94 @@ library(hms)
 setwd('/Users/mariagranell/Repositories/elo-sociality/sociality')
 
 # social data ------------------------
-social1 <- read.csv('/Users/mariagranell/Repositories/elo-sociality/data/Social_10.2021-05.2022.csv')
-social <- read.csv("/Users/mariagranell/Repositories/data/Jakobcybertrackerdatafiles/CleanFiles/affiliative_cybertracker.csv")
+{social1 <- read.csv('/Users/mariagranell/Repositories/elo-sociality/data/Social_10.2021-05.2022.csv') %>%
+  mutate(Date = as.character(mdy(Date)), Data = "Affiliative") %>% add_season("Date") %>%
+  change_group_names("Group") %>%
+  dplyr::select(
+    Data,
+    Date,
+    Time,
+    Group,
+    Context, Season,
+    IDIndividual1 = Individual1, IDIndividual2 = Individual2,
+    BehaviourIndiv1 = BehaviourIndividual1, BehaviourIndiv2 = BehaviourIndividual2,
+    #Interaction = IndEnding,
+    IDIndividual3 = Individual3, IDIndividual4 = Individual4,
+    BehaviourIndiv3 = BehaviourIndividual3, BehaviourIndiv4 = BehaviourIndividual4,
+    IDIndividual5 = Individual5, IDIndividual6 = Individual6,
+    BehaviourIndiv5 = BehaviourIndividual5, BehaviourIndiv6 = BehaviourIndividual6,
+    Remarks = RemarksA, Remarks1 =RemarksB, Remarks2 = RemarksC,Remarks3 = RemarksD,
+    DataInfo = Def,
+    DeviceID = RecordId
+  ) %>% mutate(OtherContext = NA )
+social2 <- read.csv("/Users/mariagranell/Repositories/data/Jakobcybertrackerdatafiles/CleanFiles/affiliative_cybertracker.csv")
+social <- rbind(social1, social2)}
 
+# check data with plot
+social %>% mutate(Date = ymd(Date) ) %>%add_season("Date") %>% mutate(Data = "ot") %>%
+  #filter(Group == "KB") %>%
+  plot_weekly_summary("Data", "Date")
+
+# data cleaning -------
+# the unk male is kom, Ratel or naal
+{social[grepl("kom", social$RemarksA) & grepl("Unknown", social$IDIndividual1), "IDIndividual1"] <- "Kom"
+social[grepl("kom", social$RemarksA) & grepl("Unknown", social$IDIndividual2), "IDIndividual2"] <- "Kom"
+social[grepl("Ratel", social$RemarksA) & grepl("Unknown", social$IDIndividual1), "IDIndividual1"] <- "Ratel"
+social[grepl("naal", social$RemarksA) & grepl("Unknown", social$IDIndividual1), "IDIndividual1"] <- "Naal"}
 
 #### CREATING *AD-LIB* CSI FILE ####
 ss <- social %>%
-  mutate(Date = as.character(mdy(Date))) %>%
+  mutate(Date = as.character(ymd(Date))) %>%
   filter(
     # Select the study period of the first darting
     #Date > "2021-10-01" & Date < "2022-06-01"
   ) %>%
-  pivot_longer(cols = starts_with("Remarks"), names_to = "RemarksColumn") %>%
+  unite("Remarks", starts_with("Remarks"), sep = ";", na.rm = TRUE, remove = TRUE) %>%
   filter(
-    !grepl("bge|bgs|nge|encounter|bgr|wgc", tolower(value)), # bge
+    !grepl("bge|bgs|nge|encounter|bgr|wgc", tolower(Remarks)), # bge
     !grepl("bge|bgs|nge|encounter|bgr|wgc|bgd", tolower(Context)), # bge in context
-    !grepl("experiment|xp|box|touchscreen|pattern", tolower(value)), # experiments
-    !grepl("baby", tolower(value)), # remove the actions that are towards the babies
+    !grepl("experiment|xp|box|touchscreen|pattern", tolower(Remarks)), # experiments
+    !grepl("baby|bb", tolower(Remarks)), # remove the actions that are towards the babies
 
     # remove erors in the behaviours that were entered
-    !grepl("grass|place", BehaviourIndividual1),
-    !grepl("griru|pll|bagr", BehaviourIndividual2)
+    !grepl("grass|place", BehaviourIndiv1),
+    !grepl("griru|pll|bagr", BehaviourIndiv2)
   ) %>%
-  pivot_wider(names_from = "RemarksColumn", values_from = "value") %>%
   mutate(Obs.nr = row_number(), # create an observation nr
-         BehaviourIndividual1 = tolower(BehaviourIndividual1),
-         BehaviourIndividual2 = tolower(BehaviourIndividual2)) %>%
+         BehaviourIndiv1 = tolower(BehaviourIndiv1),
+         BehaviourIndiv2 = tolower(BehaviourIndiv2)) %>%
   change_group_names("Group")
 
-# data cleaning -------
-# the unk male is kom, Ratel or naal
-{ss[grepl("kom", ss$RemarksA) & grepl("Unknown", ss$Individual1), "Individual1"] <- "Kom"
-ss[grepl("kom", ss$RemarksA) & grepl("Unknown", ss$Individual2), "Individual2"] <- "Kom"
-ss[grepl("Ratel", ss$RemarksA) & grepl("Unknown", ss$Individual1), "Individual1"] <- "Ratel"
-ss[grepl("naal", ss$RemarksA) & grepl("Unknown", ss$Individual1), "Individual1"] <- "Naal"}
-
-# Investigate the remarks and remove the ones that are uncertain
-#a <- as.data.frame(unique(s$RemarksE)) The ones that are left are ok
 
 # merging all the behaviours -----------
 {
-s12 <- ss %>% dplyr::select("Group","Individual1","BehaviourIndividual1","Individual2","BehaviourIndividual2", "Date", "Time", "Obs.nr") %>%
+s12 <- ss %>% dplyr::select("Group","IDIndividual1","BehaviourIndiv1","IDIndividual2","BehaviourIndiv2", "Date", "Time", "Obs.nr") %>%
   mutate(IntOrder = "Interaction1-2")
 s34 <- ss %>% mutate(IntOrder = "Interaction3-4",
-         Individual1 = Individual3,
-         Individual2 = Individual4,
-         BehaviourIndividual1 = BehaviourIndividual3,
-         BehaviourIndividual2 = BehaviourIndividual4
-  ) %>% dplyr::select("Group","Individual1","BehaviourIndividual1","Individual2","BehaviourIndividual2", "Date", "Time", "Obs.nr","IntOrder")
+         IDIndividual1 = IDIndividual3,
+         IDIndividual2 = IDIndividual4,
+         BehaviourIndiv1 = BehaviourIndiv3,
+         BehaviourIndiv2 = BehaviourIndiv4
+  ) %>% dplyr::select("Group","IDIndividual1","BehaviourIndiv1","IDIndividual2","BehaviourIndiv2", "Date", "Time", "Obs.nr","IntOrder")
 s56 <- ss %>% mutate(IntOrder = "Interaction5-6",
-         Individual1 = Individual5,
-         Individual2 = Individual6,
-         BehaviourIndividual1 = BehaviourIndividual5,
-         BehaviourIndividual2 = BehaviourIndividual6
-  ) %>% dplyr::select("Group","Individual1","BehaviourIndividual1","Individual2","BehaviourIndividual2", "Date", "Time", "Obs.nr","IntOrder")
+         IDIndividual1 = IDIndividual5,
+         IDIndividual2 = IDIndividual6,
+         BehaviourIndiv1 = BehaviourIndiv5,
+         BehaviourIndiv2 = BehaviourIndiv6
+  ) %>% dplyr::select("Group","IDIndividual1","BehaviourIndiv1","IDIndividual2","BehaviourIndiv2", "Date", "Time", "Obs.nr","IntOrder")
 
-ss <- s12 %>% rbind(s34,s56)
+ss <- s12 %>% rbind(s34,s56) %>%
+  filter(!is.na(IDIndividual1), !is.na(IDIndividual2))
 rm(s12,s34,s56)}
 
 # Split behaviours into rows -------
 # ignore warning
-ss <- split_behaviours(ss, c("BehaviourIndividual1", "BehaviourIndividual2"), ' ')
-ss <- split_behaviours(ss, c("BehaviourIndividual1", "BehaviourIndividual2"), '.')
+ss <- split_behaviours(ss, c("BehaviourIndiv1", "BehaviourIndiv2"), ' ')
+ss <- split_behaviours(ss, c("BehaviourIndiv1", "BehaviourIndiv2"), '.')
 
 ss <- ss%>% filter (
-  grepl("gr|sg|sw|em|pl", BehaviourIndividual1), # bge
-  grepl("gr|sg|sw|em|pl", BehaviourIndividual2)
+  grepl("gr|sg|sw|em|pl", BehaviourIndiv1), # bge
+  grepl("gr|sg|sw|em|pl", BehaviourIndiv2)
 )
 
 # Create actors and recievers ----
@@ -96,27 +118,27 @@ ss <- ss%>% filter (
 active_beh <- c('gr', 'sg', 'sw', 'em', 'pl')
 
 # determine actors ID
-for(i in seq_along(ss$BehaviourIndividual1)) {
-  if(ss$BehaviourIndividual1[i] %in% active_beh) {
-    ss$Actor[i] <- ss$Individual1[i]
-    ss$Receiver[i] <- ss$Individual2[i]
+for(i in seq_along(ss$BehaviourIndiv1)) {
+  if(ss$BehaviourIndiv1[i] %in% active_beh) {
+    ss$Actor[i] <- ss$IDIndividual1[i]
+    ss$Receiver[i] <- ss$IDIndividual2[i]
   } else {
-    ss$Actor[i] <- ss$Individual2[i]
-    ss$Receiver[i] <- ss$Individual1[i]
+    ss$Actor[i] <- ss$IDIndividual2[i]
+    ss$Receiver[i] <- ss$IDIndividual1[i]
   }
 }
 
 # determine actor behaviour
-for(i in seq_along(ss$BehaviourIndividual1)) {
-  if(ss$Individual1[i] == ss$Actor[i]) {
-    ss$BehaviourActor[i] <- ss$BehaviourIndividual1[i]
+for(i in seq_along(ss$BehaviourIndiv1)) {
+  if(ss$IDIndividual1[i] == ss$Actor[i]) {
+    ss$BehaviourActor[i] <- ss$BehaviourIndiv1[i]
   } else {
-    ss$BehaviourActor[i] <- ss$BehaviourIndividual2[i]
+    ss$BehaviourActor[i] <- ss$BehaviourIndiv2[i]
   }
 }
 rm(i, active_beh)
 ss <- ss %>% distinct() %>%
-  dplyr::select(-matches("BehaviourIndividual|Individual", ignore.case = FALSE)) %>%
+  dplyr::select(-matches("BehaviourIndiv|IDIndividual", ignore.case = FALSE)) %>%
   filter(!grepl("baby|unknown", tolower(Actor)),
          !grepl("baby|unknown", tolower(Receiver))) %>%
   integrate_otherid(Actor, Receiver)
@@ -126,14 +148,15 @@ ss <- ss %>% distinct() %>%
 #### CREATING *SCANS* CSI FILE ####
 
 # scans data -------------------
-scans <- read.csv('/Users/mariagranell/Repositories/elo-sociality/data/Scan_10.2021-05.2022.csv')
+scans <- read.csv('/Users/mariagranell/Repositories/elo-sociality/data/Scan_10.2021-05.2022.csv') %>%
+  rename(IDIndividual = Individual)
 
 # Select the study period of the first darting
 scans <- scans %>%
   mutate(Date = as.character(mdy(Date))) %>%
   filter(#Date > "2021-10-01" & Date < "2022-06-01",
          !is.na(Time),
-         !str_detect(Individual, "Unk|Baby")) %>%
+         !str_detect(IDIndividual, "Unk|Baby")) %>%
   mutate(Group = case_when( # there were some errors in the names
       Group == "Noah" ~ "Noha",
       Group == "Lemon Trmp.kept i.p" ~ "Lemon Tree",
@@ -209,7 +232,7 @@ cols <- c("AdultsIn1m", "JuvsIn1m", "AdultsIn2m", "JuvsIn2m", "AdultsIn5m","Juvs
 sc <- sc %>% pivot_longer(all_of(cols), values_to = "neighbour", names_to = "distance") %>%
   distinct()%>% filter(!is.na(neighbour), !str_detect( neighbour, "Unk|Baby|adult")) %>%
   rowwise() %>%
-  mutate(dyad = paste(sort(c(Individual, neighbour)), collapse = '-'))
+  mutate(dyad = paste(sort(c(IDIndividual, neighbour)), collapse = '-'))
 rm(cols)
 
 # Remove duplicates
@@ -235,8 +258,8 @@ library(socialindices2)
 
 # changing scans data to have Date, Actor, Reciever and Behaviour
 sca <- sc %>% mutate(Source = "scan") %>%
-  dplyr::select(Group, Date, Time, Obs.nr, Individual, neighbour, distance, Source) %>%
-  rename(Actor = Individual,
+  dplyr::select(Group, Date, Time, Obs.nr, IDIndividual, neighbour, distance, Source) %>%
+  rename(Actor = IDIndividual,
          Receiver = neighbour,
          Behaviour = distance
   ) %>%
@@ -256,9 +279,10 @@ rm(sca)}
 table(ssc$Group)
 
 ssc%>% group_by(Group) %>% summarize(n = n())
-
-
-write.csv(ssc, "/Users/mariagranell/Repositories/elo-sociality/sociality/data/Social_data_20211002_20220507.csv", row.names = F)
+range(ss$Date)
+max(ssc$Date)
+# TODO I REMOVED THE SCANS DATA.
+write.csv(ss, "/Users/mariagranell/Repositories/elo-sociality/sociality/data/Social_data_20211002_20240907.csv", row.names = F)
 
 
 ### perform CSI ###
