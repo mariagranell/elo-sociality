@@ -2,7 +2,7 @@
 # Title: Hierarchies for all groups
 # Date: 11 mar 2025
 # Author: mgranellruiz
-# Goal: This is a code that generated all hierarchies for evething you would need ever.
+# Goal: This is a code that generates all hierarchies for evething you would need ever.
 # the idea is that you calulate the herarchy here and then you export the values you are intrested in for
 # the different dates in the different projects
 
@@ -28,12 +28,19 @@ setwd()
 winnerloser <- read.csv("/Users/mariagranell/Repositories/data/elo_data/WinnerLoser.csv") %>% change_group_names("Group") %>%
     correct_pru_que_mess("winner", "Date", "Group") %>% correct_pru_que_mess("loser","Date", "Group") %>% integrate_otherid(winner, loser)
 # presence calculated in here: /Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/Presence_dplyr.R
-presence_list <- list(
+presence_list_old <- list(
   KB = read.csv("/Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/PresenceData_2020-2023_lhKB2020-2024.csv"),
   AK = read.csv("/Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/PresenceData_2020-2023_lhAK2020-2024.csv"),
   NH = read.csv("/Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/PresenceData_2020-2023_lhNH2020-2024.csv"),
   LT = read.csv("/Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/PresenceData_2020-2023_lhLT2020-2024.csv"),
   BD = read.csv("/Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/PresenceData_2020-2023_lhBD2020-2024.csv")
+)
+  presence_list <- list(
+  KB = read.csv("/Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/PresenceData_KB2020-2024.csv"),
+  AK = read.csv("/Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/PresenceData_AK2020-2024.csv"),
+  NH = read.csv("/Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/PresenceData_NH2020-2024.csv"),
+  LT = read.csv("/Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/PresenceData_LT2020-2024.csv"),
+  BD = read.csv("/Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/PresenceData_BD2020-2024.csv")
 )
   lh <- read.csv("/Users/mariagranell/Repositories/data/life_history/tbl_Creation/TBL/fast_factchecked_LH.csv") %>% filter(!is.na(AnimalCode))
 }
@@ -119,10 +126,10 @@ names(ELO_list_females) <- groups; names(ELO_list_males) <- groups
 
 # extract ELO for the different projects
 
-aa <- extract_elo(ELO_list_males$NH, extractdate = "2023-12-31", standarize = TRUE)
+aa <- extract_elo(ELO_list_males$NH, extractdate = "2023-12-31", standardize = TRUE)
 
 # MALE SERVICES PUBLICATION ------------------ # /Users/mariagranell/Repositories/male_services_index/MSpublication
-#
+{
 # parameters ------------------
 MSGroups <- c("NH", "AK", "BD", "KB", "LT")
 years <- 2022:2024 # for these years
@@ -193,8 +200,49 @@ for (grp in MSGroups) {
 }
 
 # Combine all the individual data frames into one data frame
-result_ELO <- do.call(rbind, result_list)
+result_ELO <- do.call(rbind, result_list) %>% distinct()
 rm(grp,i,j,date,maxdate,temp_df,aa,result_list,counter)
+write.csv(result_ELO, "/Users/mariagranell/Repositories/male_services_index/MSpublication/OutputFiles/ELO_maleservices.csv", row.names = FALSE)
+}
 
-#write.csv(result_ELO, "/Users/mariagranell/Repositories/male_services_index/MSpublication/OutputFiles/ELO_maleservices.csv", row.names = FALSE)
+# WHATS IN SALIVA ----------------------------- # /Users/mariagranell/Repositories/hormones/hormone_saliva/What-s-in-saliva-
+{# dataframe of interest ------------------
+saliva <- read.csv("/Users/mariagranell/Repositories/hormones/hormone_saliva/What-s-in-saliva-/Data/OutputFiles/Data_Modelling.csv") %>%
+  filter(!is.na(age)) %>%
+  dplyr::select(id, group, date, sex, age)
 
+# Initialize a new column "ELO" with NA for all rows
+saliva$ELO <- NA
+# Loop through each row of the dataframe
+for (i in seq_len(nrow(saliva))) {
+  # Only calculate Elo if the individual is an adult
+  if (saliva$age[i] == "ad") {
+    # Extract individual variables
+    indv <- saliva$id[i]
+    date <- saliva$date[i]
+    gp <- saliva$group[i]
+
+    # Choose the Elo list based on the individual's sex
+    if (saliva$sex[i] == "male") {
+      elo_list <- ELO_list_males[[gp]]
+    } else if (saliva$sex[i] == "female") {
+      elo_list <- ELO_list_females[[gp]]
+    } else {
+      elo_list <- NULL
+    }
+
+    # If an appropriate Elo list is found, extract the Elo rating
+    if (!is.null(elo_list)) {
+      elo_date <- extract_elo(elo_list, extractdate = date, standardize = TRUE)
+      # Extract the Elo for the individual (assuming elo_date is a named vector)
+      saliva$ELO[i] <- elo_date[[indv]]
+    }
+  } else {
+    # If not an adult, ensure the value remains NA
+    saliva$ELO[i] <- NA
+  }
+}
+  saliva <- saliva %>% distinct()
+
+write.csv(saliva, "/Users/mariagranell/Repositories/hormones/hormone_saliva/What-s-in-saliva-/Data/OutputFiles/ELO_whatsinsaliva.csv", row.names = FALSE)
+}

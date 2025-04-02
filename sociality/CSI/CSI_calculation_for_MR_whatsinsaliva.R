@@ -11,11 +11,10 @@ setwd("/Users/mariagranell/Repositories/elo-sociality/sociality/CSI")
 
 # BASIC DATA : -----------------------
 {
-  # dsi is the social data, you need a Date, Focal, Actor, Receiver, BehaviourFocal, Duration, Group
+# dsi is the social data, you need a Date, Focal, Actor, Receiver, BehaviourFocal, Duration, Group
 dsi <- read.csv("/Users/mariagranell/Repositories/elo-sociality/sociality/data/Social_data_20211002_20240907.csv") %>%
   mutate(Focal = Actor, BehaviourFocal = BehaviourActor, Duration = NA)
 OT <- read.csv("/Users/mariagranell/Repositories/data/presence_ot/PresenceData_ot_2021-2024_logbook/OutputFiles/OT_LB.csv")
-#presence_data <- read.csv("/Users/mariagranell/Repositories/data/presence_ot/PresenceData_ot_2021-2024_logbook/OutputFiles/Presence_logbook_2021-10-01_2024-09-07.csv")
 # presence calculated in here: /Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/Presence_dplyr.R
 presence_list <- list(
   KB = read.csv("/Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/PresenceData_KB2020-2024.csv"),
@@ -27,10 +26,9 @@ presence_list <- list(
 lh <- read.csv("/Users/mariagranell/Repositories/data/life_history/tbl_Creation/TBL/fast_factchecked_LH.csv") %>% filter(!is.na(AnimalCode))
 }
 
-
 # check data with plot
 dsi %>% add_season("Date") %>% mutate(Data = "ot") %>%
-  filter(Group == "NH") %>%
+  filter(Group == "BD") %>%
   plot_weekly_summary("Data", "Date")
 
 # Rename collumns for the loop
@@ -40,8 +38,8 @@ OT <- OT %>% rename(focal = Focal, date = Date)
 
 # FILE WHERE YOU WANT YOUR CSI CALCULATED -----------
 # should have AnimalCode, Group and Date for all the dates you´d like
-darting_sheet <- read.csv("/Users/mariagranell/Repositories/combination_darting/dating_combination/OutputFiles/Darting_sheets.csv") %>%
-  dplyr::select(AnimalCode, DartingSeason, Group, Date)
+saliva <- read.csv("/Users/mariagranell/Repositories/hormones/hormone_saliva/What-s-in-saliva-/Data/OutputFiles/Data_Modelling.csv") %>%
+  dplyr::select(AnimalCode = id, Group = group, Date = date) %>% filter(!is.na(Date), !is.na(AnimalCode))
 
 # STEP 1. ADD EMPTY OT -----------------
 # Identify dates and focals in `dsi` but not in `OT`, otherwise, assign the average OT
@@ -93,7 +91,6 @@ habituated_groups <- c("AK", "NH", "BD", "KB", "LT") # For these groups
 #if you want to subset the dates
 date1 <- max(dsi$date)
 date2 <- min(dsi$date)
-gp = "BD"
 {
 SEQ_list <- list()
 OT_list <- list()
@@ -146,8 +143,8 @@ rm(pres_subset, ot_subset, dsi_subset, individuals)
 }
 
 # STEP 4. PREPARE DF TO CONTAIN CSI ---------
-df_csi_results <- darting_sheet %>%
-  mutate(Start_CSIdaterange =  ymd(Date) %m-% months(1),   # define X time as the limit of social interactions you allow for, in this case 1 month
+df_csi_results <- saliva %>% #darting_sheet %>%
+  mutate(Start_CSIdaterange =  ymd(Date) %m-% days(6),   # define X time as the limit of social interactions you allow for, in this case 6 month
          End_CSIdaterange = ymd(Date)) %>%
   filter(Group %in% habituated_groups)
 
@@ -278,11 +275,11 @@ df_csi_results_checked <- df_csi_results %>%
   mutate(Warning = ifelse(ymd(ActualDate) > (ymd(Date) + days(3)), "Investigate", NA),
          CSI = ifelse(CSI %in% c("Inf", "NaN"), NA, CSI),
          zCSI = ifelse(zCSI %in% c("Inf", "NaN"), NA, zCSI),
-  )
+  ) %>% distinct()
 
  rm(date1,date2,dsi,habituated_groups,KeyOtherID)
  rm(mean_OT_per_group, missing_records_with_OT, missing_focals)
  rm(gp, OT, presence_data, updated_OT)
 
 # STEP 8. SAVE
-write.csv(df_csi_results_checked,"/Users/mariagranell/Repositories/elo-sociality/sociality/CSI/OutputData/dartingCSI.csv", row.names = FALSE)
+write.csv(df_csi_results_checked,"/Users/mariagranell/Repositories/elo-sociality/sociality/CSI/OutputData/whastinsalivaCSI.csv", row.names = FALSE)
