@@ -5,6 +5,8 @@ https://www.toptal.com/developers/gitignore?templates=macos,intellij,pycharm
 
 /Users/mariagranell/Repositories/elo-sociality/data
 /Users/mariagranell/Repositories/elo-sociality/sociality/extrafiles_from_josie_originals
+/Users/mariagranell/Repositories/elo-sociality/elo/AllJosieFilesExplained
+elo/AllJosieFilesExplained/
 *.pdf
 *.DS
 *.csv

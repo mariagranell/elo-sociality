@@ -3,7 +3,7 @@
 # Date: 11 mar 2025
 # Author: mgranellruiz
 # Goal: This is a code that generates all hierarchies for evething you would need ever.
-# the idea is that you calulate the herarchy here and then you export the values you are intrested in for
+# the idea is that you calulate the hierarchy here and then you export the values you are intrested in for
 # the different dates in the different projects
 
 # MALES AND FEMALES HIERARCHY SHOULD AND HAVE TO BE CALUCLATED SEPARETEDLY
@@ -25,7 +25,7 @@ setwd()
 
 # data ------------------------
 {# data given to me by josie, it includes logbook and scan
-winnerloser <- read.csv("/Users/mariagranell/Repositories/data/elo_data/WinnerLoser.csv") %>% change_group_names("Group") %>%
+winnerloser <- read.csv("/Users/mariagranell/Repositories/data/elo_data/WinnerLoser_allmydata.csv") %>% change_group_names("Group") %>%
     correct_pru_que_mess("winner", "Date", "Group") %>% correct_pru_que_mess("loser","Date", "Group") %>% integrate_otherid(winner, loser)
 # presence calculated in here: /Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/Presence_dplyr.R
 presence_list_old <- list(
@@ -36,19 +36,20 @@ presence_list_old <- list(
   BD = read.csv("/Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/PresenceData_2020-2023_lhBD2020-2024.csv")
 )
   presence_list <- list(
-  KB = read.csv("/Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/PresenceData_KB2020-2024.csv"),
-  AK = read.csv("/Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/PresenceData_AK2020-2024.csv"),
-  NH = read.csv("/Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/PresenceData_NH2020-2024.csv"),
-  LT = read.csv("/Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/PresenceData_LT2020-2024.csv"),
-  BD = read.csv("/Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/PresenceData_BD2020-2024.csv")
+  KB = read.csv("/Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/PresenceData_KB2020-2025.csv"),
+  AK = read.csv("/Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/PresenceData_AK2020-2025.csv"),
+  NH = read.csv("/Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/PresenceData_NH2020-2025.csv"),
+  LT = read.csv("/Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/PresenceData_LT2020-2025.csv"),
+  BD = read.csv("/Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/PresenceData_BD2020-2025.csv")
 )
   lh <- read.csv("/Users/mariagranell/Repositories/data/life_history/tbl_Creation/TBL/fast_factchecked_LH.csv") %>% filter(!is.na(AnimalCode))
 }
 
 # cleaning of winner loser, this step is done by trial and error seeing the mistakes gotten from the elo.seq() function and the seqcheck() function
 winnerloser_clean <- winnerloser %>% filter(winner != loser) %>% distinct() %>%
-  # Yubb was worngly named, one you update lh, it will be automatically corrected
-  mutate(Date = as.Date(Date), winner = ifelse(winner == "Yubb", "Yub", winner), loser = ifelse(loser == "Yubb", "Yub", loser)) %>%
+  # plain jane is considered a baby, that is wrong.
+  mutate(AgeClassWinner = ifelse(winner == "PlainJane", "AM", AgeClassWinner),
+         AgeClassLoser = ifelse(loser == "PlainJane", "AM", AgeClassLoser)) %>%
   # Small deletions following lh file
   filter(!(winner == "Gub" & Date >= as.Date(lh[lh$AnimalCode == "Gub", "StartDate_mb"], format = "%Y-%m-%d") | loser == "Gub" & Date >= as.Date(lh[lh$AnimalCode == "Gub", "StartDate_mb"], format = "%Y-%m-%d")),
          !(winner == "Naa" & Date >= as.Date(lh[lh$AnimalCode == "Naa", "StartDate_mb"], format = "%Y-%m-%d") | loser == "Naa" & Date >= as.Date(lh[lh$AnimalCode == "Naa", "StartDate_mb"], format = "%Y-%m-%d"))) %>%
@@ -60,6 +61,7 @@ winnerloser_clean <- winnerloser %>% filter(winner != loser) %>% distinct() %>%
 
 # the groups
 groups <- c("NH", "AK", "BD", "KB", "LT")
+grp = "AK"
 
 ELO_list_females <- lapply(groups, function(grp) {
 
@@ -122,11 +124,17 @@ ELO_list_males <- lapply(groups, function(grp) {
 # Name the list elements by the group names
 names(ELO_list_females) <- groups; names(ELO_list_males) <- groups
 
+# Results
+eloplot(ELO_list_females$NH)
+eloplot(ELO_list_females$AK)
+eloplot(ELO_list_females$BD)
+eloplot(ELO_list_females$KB)
+
 # FINISHED -------
 
 # extract ELO for the different projects
-
-aa <- extract_elo(ELO_list_males$NH, extractdate = "2023-12-31", standardize = TRUE)
+aa <- extract_elo(ELO_list_males$KB, extractdate = "2024-04-21", standardize = TRUE)
+aa <- extract_elo(ELO_list_males$AK, extractdate = "2025-01-21", standardize = TRUE)
 
 # MALE SERVICES PUBLICATION ------------------ # /Users/mariagranell/Repositories/male_services_index/MSpublication
 {
@@ -245,4 +253,58 @@ for (i in seq_len(nrow(saliva))) {
   saliva <- saliva %>% distinct()
 
 write.csv(saliva, "/Users/mariagranell/Repositories/hormones/hormone_saliva/What-s-in-saliva-/Data/OutputFiles/ELO_whatsinsaliva.csv", row.names = FALSE)
+}
+
+# VIGILANCE - MALE SERVICES PUBLICATION ----------------------------- # /Users/mariagranell/Repositories/male_services_index/MSpublication
+{# dataframe of interest ------------------
+vigilance <- read.csv("/Users/mariagranell/Repositories/data/acess_data/OutputData/vigilance_access.csv") %>%
+  left_join(lh[,c("AnimalCode", "Sex", "DOB_estimate", "Group_mb", "StartDate_mb", "EndDate_mb", "Tenure_type")],
+            by = c("IDIndividual1" = "AnimalCode", "Group" = "Group_mb"), relationship = "many-to-many") %>%
+  filter(Date > StartDate_mb & Date < EndDate_mb) %>%
+  mutate(Age = add_age(DOB_estimate, Date, "Years"), # calculate their age based on the date of the focal
+         Age_class = add_age_class(Age,Sex,Tenure_type)) %>%
+  filter(Age_class %in% "adult", Group %in% c("AK", "BD", "KB", "NH")) %>%
+  dplyr::select(IDIndividual1, Group, Date, Sex, Age_class) %>%
+  # not enough data for these males
+  filter(IDIndividual1 != "Oti",
+         !(IDIndividual1 == "Guz" & Group == "KB"),
+         !(Date > "2024-05-26" & Group == "KB")
+  ) %>%
+  drop_na()
+
+# Initialize a new column "ELO" with NA for all rows
+vigilance$ELO <- NA
+  #vigilance <- head(vigilance)
+# Loop through each row of the dataframe
+for (i in seq_len(nrow(vigilance))) {
+  # Only calculate Elo if the individual is an adult
+  if (vigilance$Age_class[i] == "adult") {
+    # Extract individual variables
+    indv <- vigilance$IDIndividual1[i]
+    date <- vigilance$Date[i]
+    gp <- vigilance$Group[i]
+
+    # Choose the Elo list based on the individual's sex
+    if (vigilance$Sex[i] == "M") {
+      elo_list <- ELO_list_males[[gp]]
+    } else if (vigilance$Sex[i] == "F") {
+      elo_list <- ELO_list_females[[gp]]
+    } else {
+      elo_list <- NULL
+    }
+
+    # If an appropriate Elo list is found, extract the Elo rating
+    if (!is.null(elo_list)) {
+      elo_date <- extract_elo(elo_list, extractdate = date, standardize = TRUE)
+      # Extract the Elo for the individual (assuming elo_date is a named vector)
+      vigilance$ELO[i] <- elo_date[[indv]]
+    }
+  } else {
+    # If not an adult, ensure the value remains NA
+    vigilance$ELO[i] <- NA
+  }
+}
+vigilance <- vigilance %>% distinct()
+
+write.csv(vigilance, "/Users/mariagranell/Repositories/male_services_index/MSpublication/OutputFiles/ELO_vigilance_maleservices.csv", row.names = FALSE)
 }

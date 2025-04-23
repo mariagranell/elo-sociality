@@ -1,5 +1,11 @@
 library(dplyr)
 library(lubridate)
+library(stringr)
+library(tidyr)
+source('/Users/mariagranell/Repositories/data/functions.R')
+
+# orginal script made by Josie
+#https://mail.google.com/mail/u/0/#search/josefien/FMfcgzQZTpwsZCbSwnPLFPHMBmGgWGKh
 
 # parameters ------------------
 groups <- c("NH", "AK", "BD", "KB", "LT")
@@ -57,8 +63,6 @@ focal <- read.csv("/Users/mariagranell/Repositories/data/Jakobcybertrackerdatafi
          date = as.Date(date))
 }
 
-# ask josie about mounts data. Is very poor
-
 rbind(pd, pd2, pd3, focal) %>% distinct() %>%
   add_season(.,"date") %>%
   plot_weekly_summary(., "data", "date")
@@ -95,7 +99,8 @@ sex <- change_group_names(sex_combination, "group") %>%
   filter(group %in% groups,
          !is.na(MaleID),
          !is.na(FemaleID)) %>% 
-  dplyr::select(date, MaleID, FemaleID, group)
+  dplyr::select(date, MaleID, FemaleID, group) %>%
+  correct_pru_que_mess("MaleID", "date", "group")
 
 #write.csv(sex, "IVP DATA/Crossings/Sex_csi.csv", row.names = F)
 
@@ -113,7 +118,7 @@ sex_gp <- sex %>%
          MaleID %in% individuals_in_gp,
          FemaleID %in% individuals_in_gp)
 
-  hist(sex_gp$date, breaks = "months",main = paste("Histogram for group:", gp))
+  #hist(sex_gp$date, breaks = "months",main = paste("Histogram for group:", gp))
   SEQ_list[[gp]] <- sex_gp
 }
 SEQ <- bind_rows(SEQ_list)
@@ -125,85 +130,47 @@ SEQ <- bind_rows(SEQ_list)
 range(sex$date)
 season_df_possible <- season_df[3:8,] # only these seasons can be calculated
 
-MSStartDate = "2023-04-01"
-MSEndDate = "2023-06-30"
+MSStartDate = "2023-10-01"
+MSEndDate = "2023-12-31"
 
-# todo control for tenure. Josie divided the n_mounts by the months present
+combined_list <- list()
+
+for (i in seq_len(nrow(season_df_possible))) {
+
+MSStartDate = as.character(season_df_possible[i,"MSStartDate"][[1]])
+MSEndDate = as.character(season_df_possible[i,"MSEndDate"][[1]])
+
+# Define the date range: past 12 months (you can also use Date - 365 if you prefer)
+start_date_last = as.Date(MSEndDate) %m-% months(12); end_date_last = as.Date(MSEndDate)
 mount_last <- SEQ %>%
-  mutate(
-      # Define the date range: past 12 months (you can also use Date - 365 if you prefer)
-      start_date =as.Date(MSEndDate) %m-% months(12),
-      end_date= as.Date(MSEndDate)
-  ) %>%
-  filter(date >= start_date, date < end_date) %>%
+  filter(date >= start_date_last, date < end_date_last) %>%
   group_by(MaleID, group) %>%
-  summarize(mount_last12 = n()) %>%
-  left_join(lh %>% dplyr::select(AnimalCode, Group_mb,StartDate_mb, EndDate_mb), by = c("MaleID" = "AnimalCode", "group" = "Group_mb")) %>%
-  mutate(AllStay = ifelse((as.Date(MSEndDate) %m-% months(12))< StartDate_mb, "yes", "no"),
-         Stay = as.Date(MSEndDate) - as.Date(StartDate_mb))
+  dplyr::summarize(mount_last12 = n()) %>%
+  left_join(lh %>% filter(StartDate_mb < end_date_last, EndDate_mb > start_date_last) %>%
+              dplyr::select(AnimalCode, Group_mb,StartDate_mb, EndDate_mb), by = c("MaleID" = "AnimalCode", "group" = "Group_mb")) %>%
+  mutate(AllStay_last = ifelse(start_date_last > StartDate_mb & end_date_last < EndDate_mb, "yes", "no"),
+         Stay_last = end_date_last - as.Date(StartDate_mb))
 
+start_date_coming = as.Date(MSEndDate) ; end_date_coming = as.Date(MSEndDate) + months(12)
 mount_coming <- SEQ %>%
-  mutate(
-    # Define the date range: next 12 months (you can also use Date + 365 if you prefer)
-      start_date = as.Date(MSEndDate),
-      end_date = as.Date(MSEndDate) + months(12)
-  ) %>%
-  filter(date >= start_date, date < end_date) %>%
+  filter(date >= start_date_coming, date < end_date_coming) %>%
   group_by(MaleID, group) %>%
-  summarize(mount_coming12 = n())
+  dplyr::summarize(mount_coming12 = n()) %>%
+  left_join(lh %>% filter(StartDate_mb < end_date_coming, EndDate_mb > start_date_coming) %>%
+              dplyr::select(AnimalCode, Group_mb,StartDate_mb, EndDate_mb), by = c("MaleID" = "AnimalCode", "group" = "Group_mb")) %>%
+  mutate(AllStay_coming = ifelse(start_date_coming > StartDate_mb & end_date_coming < EndDate_mb, "yes", "no"),
+         Stay_coming = as.Date(EndDate_mb) - start_date_coming)
 
-combined_df <- full_join(mount_last, mount_coming, by = c("MaleID", "group")) %>%
-  mutate(ReferencedDate = MSEndDate)
+combined_df <- full_join(mount_last, mount_coming, by = c("MaleID", "group", "StartDate_mb", "EndDate_mb")) %>%
+  mutate(ReferencedDate = MSEndDate,
+         Stay_last = as.numeric(Stay_last, units = "days"),
+         Mount_prop_last = ifelse(AllStay_last == "yes", mount_last12, mount_last12 * (365/Stay_last)),
+         Stay_coming = as.numeric(Stay_coming, units = "days"),
+         Mount_prop_coming = ifelse(AllStay_coming == "yes", mount_coming12, mount_coming12 * (365/Stay_coming)),
+         )
+  combined_list[[i]] <- combined_df
+}
 
-# Now, add a column to cros_sex that counts, for each row, the number of times
-# that individual's name (in the column ID) appears as 'focal' in the corresponding
-# group-specific dataframe (from SEQ_list) within the past 12 months.
-cros_sex <- cros_sex %>%
-  rowwise() %>%  # Process row-by-row
-  mutate(Date = as.Date(Date)) %>%
-  mutate(
-    mount_last12 = {
-      # Get the dataframe for the corresponding group.
-      # Make sure the group name in cros_sex matches the names in SEQ_list.
-      sex_df <- SEQ_list[[Group]]
+sexualinteractions_df <- bind_rows(combined_list)
 
-      # Define the date range: past 12 months (you can also use Date - 365 if you prefer)
-      start_date <- Date %m-% months(12)
-      end_date <- Date
-
-      # Filter the dataframe:
-      # - Only consider rows where 'date' is within the last 12 months.
-      # - Only count rows where the focal individual's name equals the ID.
-      # (Change "focal" to another column if needed.)
-      count <- sex_df %>%
-        filter(date >= start_date, date < end_date, focal == ID) %>%
-        nrow()
-
-      count
-    },
-    mount_coming12 = {
-      # Get the dataframe for the corresponding group.
-      # Make sure the group name in cros_sex matches the names in SEQ_list.
-      sex_df <- SEQ_list[[Group]]
-
-      # Define the date range: past 12 months (you can also use Date - 365 if you prefer)
-      start_date <- Date
-      end_date <- Date + 365
-
-      # Filter the dataframe:
-      # - Only consider rows where 'date' is within the last 12 months.
-      # - Only count rows where the focal individual's name equals the ID.
-      # (Change "focal" to another column if needed.)
-      count <- sex_df %>%
-        filter(date >= start_date, date < end_date, focal == ID) %>%
-        nrow()
-
-      count
-    }
-  ) %>%
-  ungroup() %>%
-  mutate(Mount = case_when(
-    TenureYears < 1 ~ mount_last12/TenureYears,
-    T ~ mount_last12
-  ),
-  Mount = ifelse(is.na(Mount), 0, Mount))
+#write.csv(sexualinteractions_df, "/Users/mariagranell/Repositories/elo-sociality/sexual/OutputFiles/SexualInteractions_MS.csv", row.names = F)
