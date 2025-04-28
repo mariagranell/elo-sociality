@@ -23,10 +23,9 @@ library(EloRating)
 # path ------------------------
 setwd()
 
-# data ------------------------
+# # data ------------------------
 {# data given to me by josie, it includes logbook and scan
-winnerloser <- read.csv("/Users/mariagranell/Repositories/data/elo_data/WinnerLoser_allmydata.csv") %>% change_group_names("Group") %>%
-    correct_pru_que_mess("winner", "Date", "Group") %>% correct_pru_que_mess("loser","Date", "Group") %>% integrate_otherid(winner, loser)
+winnerloser <- read.csv("/Users/mariagranell/Repositories/data/elo_data/WinnerLoser_allmydata.csv")
 # presence calculated in here: /Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/Presence_dplyr.R
 presence_list_old <- list(
   KB = read.csv("/Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/PresenceData_2020-2023_lhKB2020-2024.csv"),
@@ -125,16 +124,16 @@ ELO_list_males <- lapply(groups, function(grp) {
 names(ELO_list_females) <- groups; names(ELO_list_males) <- groups
 
 # Results
-eloplot(ELO_list_females$NH)
-eloplot(ELO_list_females$AK)
-eloplot(ELO_list_females$BD)
-eloplot(ELO_list_females$KB)
+eloplot(ELO_list_males$NH)
+eloplot(ELO_list_males$AK)
+eloplot(ELO_list_males$BD)
+eloplot(ELO_list_males$KB)
 
 # FINISHED -------
 
 # extract ELO for the different projects
-aa <- extract_elo(ELO_list_males$KB, extractdate = "2024-04-21", standardize = TRUE)
-aa <- extract_elo(ELO_list_males$AK, extractdate = "2025-01-21", standardize = TRUE)
+aa <- extract_elo(ELO_list_males$KB, extractdate = "2022-06-28", standardize = TRUE)
+aa <- extract_elo(ELO_list_males$NH, extractdate = "2025-08-01", standardize = TRUE)
 
 # MALE SERVICES PUBLICATION ------------------ # /Users/mariagranell/Repositories/male_services_index/MSpublication
 {
@@ -257,7 +256,7 @@ write.csv(saliva, "/Users/mariagranell/Repositories/hormones/hormone_saliva/What
 
 # VIGILANCE - MALE SERVICES PUBLICATION ----------------------------- # /Users/mariagranell/Repositories/male_services_index/MSpublication
 {# dataframe of interest ------------------
-vigilance <- read.csv("/Users/mariagranell/Repositories/data/acess_data/OutputData/vigilance_access.csv") %>%
+vigilance <- read.csv("/Users/mariagranell/Repositories/male_services_index/MSpublication/CleanFiles/vigilance_allmyfiles.csv") %>%
   left_join(lh[,c("AnimalCode", "Sex", "DOB_estimate", "Group_mb", "StartDate_mb", "EndDate_mb", "Tenure_type")],
             by = c("IDIndividual1" = "AnimalCode", "Group" = "Group_mb"), relationship = "many-to-many") %>%
   filter(Date > StartDate_mb & Date < EndDate_mb) %>%
@@ -272,19 +271,18 @@ vigilance <- read.csv("/Users/mariagranell/Repositories/data/acess_data/OutputDa
   ) %>%
   drop_na()
 
+range(vigilance$Date)
+
 # Initialize a new column "ELO" with NA for all rows
 vigilance$ELO <- NA
   #vigilance <- head(vigilance)
 # Loop through each row of the dataframe
 for (i in seq_len(nrow(vigilance))) {
-  # Only calculate Elo if the individual is an adult
   if (vigilance$Age_class[i] == "adult") {
-    # Extract individual variables
     indv <- vigilance$IDIndividual1[i]
     date <- vigilance$Date[i]
     gp <- vigilance$Group[i]
 
-    # Choose the Elo list based on the individual's sex
     if (vigilance$Sex[i] == "M") {
       elo_list <- ELO_list_males[[gp]]
     } else if (vigilance$Sex[i] == "F") {
@@ -293,18 +291,39 @@ for (i in seq_len(nrow(vigilance))) {
       elo_list <- NULL
     }
 
-    # If an appropriate Elo list is found, extract the Elo rating
     if (!is.null(elo_list)) {
-      elo_date <- extract_elo(elo_list, extractdate = date, standardize = TRUE)
-      # Extract the Elo for the individual (assuming elo_date is a named vector)
-      vigilance$ELO[i] <- elo_date[[indv]]
+      if (date %in% elo_list$truedates) {
+        elo_date <- extract_elo(elo_list, extractdate = date, standardize = TRUE)
+
+        if (indv %in% names(elo_date)) {
+          vigilance$ELO[i] <- elo_date[[indv]]
+        } else {
+          vigilance$ELO[i] <- paste0("Individual ", indv, " not found at date")
+        }
+      } else {
+        vigilance$ELO[i] <- "Date out of bounds"
+      }
+    } else {
+      vigilance$ELO[i] <- NA
     }
   } else {
-    # If not an adult, ensure the value remains NA
     vigilance$ELO[i] <- NA
   }
 }
+
 vigilance <- vigilance %>% distinct()
 
-write.csv(vigilance, "/Users/mariagranell/Repositories/male_services_index/MSpublication/OutputFiles/ELO_vigilance_maleservices.csv", row.names = FALSE)
+# In AK there was a long period in where Sho was the only adult male, making him the dominant.
+  vigilance_corrected <- vigilance %>% add_group_composition( "Group", "Date") %>%
+    mutate(
+      ELO = case_when(
+        AM == 1 ~ "1",
+        # particular case,
+        IDIndividual1 == "Sho" & Date == "2024-08-05" ~ "0", # during this time there were two males in AK, buk and sho, buk was the dominant even if there is no aggression data, until he died due to predation.
+        IDIndividual1 == "Sho" & Date == "2024-08-23" ~ "0", # during this time there were two males in AK, buk and sho, buk was the dominant even if there is no aggression data, until he died due to predation.
+        TRUE ~ ELO
+      )
+    ) %>% dplyr::select(IDIndividual1, Group, Date, Sex, Age_class, ELO) %>% distinct()
+
+write.csv(vigilance_corrected, "/Users/mariagranell/Repositories/male_services_index/MSpublication/OutputFiles/ELO_vigilance_maleservices.csv", row.names = FALSE)
 }

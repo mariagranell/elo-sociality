@@ -36,7 +36,7 @@ plot_weekly_summary(old, "Data", "Date")
 # So omit all interactions with a supporter
 
   # Remove interactions with supporters
-  filter(IDSupporters != "") %>%
+  filter(is.na(IDSupporters)) %>%
   # Select columns of interest
   dplyr::select(Date, Time, Group, IDIndividual1, BehaviourIndiv1, IDIndividual2, BehaviourIndiv2, Data) %>%
   # Rename columns for clarity
@@ -56,7 +56,7 @@ plot_weekly_summary(old, "Data", "Date")
 plot_weekly_summary(new, "Data", "Date")
 }
 
-new %>% filter(Group == "AK") %>%
+new %>% filter(Group == "KB") %>%
 plot_weekly_summary(., "Data", "Date")
 
 # Combine the old and new dataframes:
@@ -76,7 +76,7 @@ plot_weekly_summary(elo, "Data", "Date")
 # --- LOAD & PREPARE FOCAL AGONISTIC DATA ---
 {# Now we do the same for focals
 # I don´t have old focal
-#foc_old <- read.csv("IVP DATA/Dominance hierarchy/Focal_agonistic2022-2023.csv")  %>% mutate(Date = as.Date(Date))
+#foc_old <- read.csv("IVP DATA/Dominance hierarchy/Focal_agonistic2022-2023.csv") %>% mutate(Date = as.Date(Date))
 
 # This file contains all the agonistic interactions recorded during focals without support
 # Check the time period:
@@ -109,21 +109,73 @@ ff <- read.csv("/Users/mariagranell/Repositories/male_services_index/MSpublicati
   )
 }
 
+# --- LOAD & PREPARE SCAN AGONISTIC DATA ---
+{# Now we do the same for scans
+
+# This file contains all the agonistic interactions recorded during focals without support
+# Check the time period:
+#hist(foc_old$Date, breaks = "weeks")
+# So this file is from May 2022 (when we started focalling) until May 2023 basically
+
+# Now we should load the newest file or the newest and the file until May 2023
+sc <- read.csv("/Users/mariagranell/Repositories/male_services_index/MSpublication/CleanFiles/scan_allmyfiles.csv") %>%
+  filter(Behaviour == "Agonistic") %>%
+  # fill in the IDPartners
+  mutate(IDPartners = case_when(
+    is.na(IDPartners) & !is.na(NNAdult) ~ NNAdult,
+    is.na(IDPartners) & is.na(NNAdult) ~NA,
+    TRUE ~ IDPartners),
+    # Put the other behaviour in the BehavioutType
+    BehaviourType = ifelse(!is.na(Other), Other, BehaviourType)) %>%
+  mutate(Date = ymd(Date)) %>%
+  # Select relevant columns and create an empty VictimBehaviour column
+  dplyr::select(Date, Time, Group, IDIndividual1, BehaviourType, IDPartners) %>%
+  mutate(VictimBehaviour = "") %>%
+  # The difference between focal and ad lib data is that all behaviours are written from the perspective of the focal (in focals)
+  # That means that if ID2 does something to ID1, it is written as the passive form ("being" groomed) for ID1
+  # We want to have the behaviours for ID1 and ID2 separate to determine who is the "winner" and "loser"
+  # Extract VictimBehaviour from BehaviourType and clean it out from Aggressor's behaviour:
+  mutate(
+    VictimBehaviour = str_extract_all(BehaviourType, "(?<=\\b[bB])(\\w{2,4})"),
+    VictimBehaviour = ifelse(lengths(VictimBehaviour) > 0, sapply(VictimBehaviour, paste, collapse = " "), NA),
+    BehaviourType = str_replace_all(BehaviourType, "\\b[bB]\\w{2,4}\\b", "")
+  ) %>%
+  # Rename columns for consistency
+  rename(
+    Aggressor = IDIndividual1,
+    AggressorBehaviour = BehaviourType,
+    Victim = IDPartners
+  ) %>%
+  mutate(across(where(is.character), ~ ifelse(. %in% c("", "NA","."), NA, .))) %>%
+  #dplyr::select(-Time) %>%
+  distinct() %>%
+  filter(!(AggressorBehaviour == "Other" & is.na(VictimBehaviour))) %>%
+  # take care of duplicates for 1 second
+  dplyr::group_by(across(-Time)) %>%
+  dplyr::slice(1) %>%
+  dplyr::ungroup()
+}
+
 # we bind both focals together
 # I don´t have old focals
 #focals <- bind_rows(foc_old, ff) %>% distinct()
 focals <- ff %>% distinct()
 
-# Now we bind both ad lib and focals together
-final <- bind_rows(elo, focals) %>%
-  mutate(Date = as.Date(Date)) %>%
+# Now we bind both ad lib, scan and focals together
+final <- bind_rows(elo, focals, sc) %>%
+  mutate(Date = as.Date(Date), Data = "elo_aggonistic") %>%
   change_group_names("Group") %>%
   integrate_otherid(Aggressor, Victim) %>%
   correct_pru_que_mess("Aggressor", "Date", "Group") %>%
-  correct_pru_que_mess("Victim", "Date", "Group")
+  correct_pru_que_mess("Victim", "Date", "Group") %>%
+  distinct()
 
 # Check data:
 final %>% mutate(Data = "Elo") %>% add_season("Date") %>%
+plot_weekly_summary("Data","Date")
+
+final %>% mutate(Data = "Elo") %>% add_season("Date") %>%
+  filter(Group == "KB") %>%
 plot_weekly_summary("Data","Date")
 
 # no need to save the data because we combined the dataframes
@@ -152,6 +204,7 @@ final_data <- final %>% mutate(Data = "WinnerLoser")
 
 ## ---- PREPARE THE DATA ----
 d <- final_data %>%
+
   # Order by date
   arrange(Date) %>%
   # Remove rows with any NA
@@ -250,7 +303,11 @@ fight.data <- fight.data %>%
 ## ---- REMOVE ROW NAMES ----
 fight.data <- fight.data %>% 
   mutate(row_id = row_number()) %>%
-  dplyr::select(-row_id)
+  dplyr::select(-row_id) %>%
+  # remove 1 second duplicates
+  dplyr::group_by(across(-Time)) %>%
+  dplyr::slice(1) %>%
+  dplyr::ungroup()
 
 ## ---- CORRECT NAME MISTAKES ----
 # Replace names using mutate and recode (or case_when)
@@ -287,13 +344,31 @@ lh <- read.csv("/Users/mariagranell/Repositories/data/life_history/tbl_Creation/
   dplyr::select(AnimalCode,Group_mb, Sex, DOB_estimate, Tenure_type) %>% distinct()
 
 ## ---- CALCULATE WINNER AGE & SEX ----
-# You can ignore the warning here
+
+# Just in case, I´ll merge the winner_losser that josie gave me, so I make sure I have all the data that I can have
+# but I checked the numbers and it adds to the same number of entries.
+# I also did an anti merge thingy and its all good. we will add it just in case, but you could remove it! Is safe!
+josie_winner_loser <- read.csv("/Users/mariagranell/Repositories/data/elo_data/WinnerLoser.csv") %>%
+  change_group_names("Group") %>%
+  mutate(across(where(is.character), ~ ifelse(. %in% c("", "NA"), NA, .))) %>%
+  # Select columns of interest
+  dplyr::select(Date, Time, Group, winner, BehaviourW, loser, BehaviourL)
+
+total_fight.data <- fight.data %>%
+  mutate(across(where(is.character), ~ ifelse(. %in% c("", "NA"), NA, .))) %>%
+  dplyr::select(Date, Time, Group, winner, BehaviourW, loser, BehaviourL) %>%
+  #rbind(josie_winner_loser) %>% distinct()  %>%
+  # remove 1 second duplicates
+  dplyr::group_by(across(-Time)) %>%
+  dplyr::slice(1) %>%
+  dplyr::ungroup()
+
 # Please note: the age of the male is an approximation - usually we do not know when they were born if they were not born in IVP
 d_win <- fight.data %>%
   left_join(lh, by = c("winner" = "AnimalCode", "Group" = "Group_mb"), relationship ="many-to-many") %>%
   rowwise() %>%
   mutate(WinnerAge = add_age(DOB_estimate, Date, "Years"),
-         AgeClassWinner = get_age_class(Sex,WinnerAge)) %>%
+         AgeClassWinner = get_age_class_w_tenuretype(Sex,WinnerAge, Tenure_type)) %>%
   ungroup() %>%
   dplyr::select(-DOB_estimate, -Tenure_type) %>%
   rename(WinnerSex = Sex) %>% distinct()
@@ -303,7 +378,7 @@ d_full <- d_win %>%
   left_join(lh, by = c("loser" = "AnimalCode", "Group" = "Group_mb"), relationship ="many-to-many") %>%
   rowwise() %>%
   mutate(LoserAge = add_age(DOB_estimate, Date, "Years"),
-         AgeClassLoser = get_age_class(Sex,LoserAge)) %>%
+         AgeClassLoser = get_age_class_w_tenuretype(Sex,LoserAge, Tenure_type)) %>%
   ungroup() %>%
   dplyr::select(-DOB_estimate, -Tenure_type) %>%
   rename(LoserSex = Sex) %>% distinct()
@@ -314,31 +389,25 @@ d_full <- d_win %>%
 nrow(d_full %>% filter(is.na(AgeClassLoser)))
 nrow(d_full %>% filter(is.na(AgeClassWinner)))
 
-# Assume get_age_class is available
+# Assume get_age_class_w_tenuretype is available
 winner_loser <- d_full %>%
   mutate(across(where(is.character), ~ ifelse(. %in% c("", "NA"), NA, .))) %>%
   # Select columns of interest
   dplyr::select(Date, Time, Group, winner, BehaviourW, loser, BehaviourL,
          WinnerSex, WinnerAge, LoserSex, LoserAge, AgeClassWinner, AgeClassLoser) %>%
-  na.omit() %>% distinct()
+  na.omit() %>% distinct() %>%
+  # remove 1 second duplicates
+  dplyr::group_by(across(-Time)) %>%
+  dplyr::slice(1) %>%
+  dplyr::ungroup()
+
 nrow(winner_loser)
 
-aa <- read.csv("/Users/mariagranell/Repositories/data/elo_data/WinnerLoser.csv") %>%
-  change_group_names("Group")
-
-bb <- rbind(winner_loser, aa) %>% distinct() %>% dplyr::select(-WinnerAge, -LoserAge) %>% distinct()
-
-bb %>% mutate( Data = "all") %>% add_season("Date") %>%
-plot_weekly_summary("Data", "Date" ) +
-   scale_y_continuous(limits = c(0, 900))
-
-winner_loser %>% mutate( Data = "mine") %>% add_season("Date") %>%
-plot_weekly_summary("Data", "Date" ) +
-   scale_y_continuous(limits = c(0, 900))
-
-aa %>% mutate( Data = "josie") %>% add_season("Date") %>% distinct() %>%
-plot_weekly_summary("Data", "Date" ) +
-   scale_y_continuous(limits = c(0, 900))
+winner_loser_clean <- winner_loser %>%
+    correct_pru_que_mess("winner", "Date", "Group") %>%
+    correct_pru_que_mess("loser","Date", "Group") %>%
+    integrate_otherid(winner, loser) %>%
+    distinct()
 
 ## ---- WRITE THE FINAL CSV ----
-write.csv(winner_loser, "/Users/mariagranell/Repositories/data/elo_data/WinnerLoser_allmydata.csv", row.names = FALSE)
+write.csv(winner_loser_clean, "/Users/mariagranell/Repositories/data/elo_data/WinnerLoser_allmydata.csv", row.names = FALSE)
