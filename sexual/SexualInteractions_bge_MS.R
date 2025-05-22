@@ -10,7 +10,9 @@ sex <- read.csv("/Users/mariagranell/Repositories/elo-sociality/sexual/OutputFil
 
 # parameters ------------------
 MSgroups <- c("NH", "AK", "BD", "KB", "LT")
-years <- 2022:2025 # for these years
+years <- 2021:2025 # for these years
+
+range(sex$date)
 {
 # Define seasons and their month ranges
 seasons <- data.frame(
@@ -51,7 +53,7 @@ sex_gp <- sex %>%
 
 ## Mount count -------
 # dataframe where I want the calculation
-cros_sex <- read.csv("/Users/mariagranell/Repositories/male_services_index/MSpublication/OutputFiles/vigilance_maleservices_basedf.csv") %>%
+cros_sex <- read.csv("/Users/mariagranell/Repositories/male_services_index/MSpublication/OutputFiles/bge_maleservices_basedf.csv") %>%
   filter(Sex == "M", Age_class == "adult", Group %in% MSgroups) %>%
   mutate(Date = ymd(Date),
          TenureYears = as.numeric(ymd(Date) - ymd(StartDate_mb)) / 365.25) %>%
@@ -81,7 +83,7 @@ cros_sex <- cros_sex %>%
       # - Only count rows where the focal individual's name equals the ID.
       # (Change "focal" to another column if needed.)
       count <- sex_df %>%
-        filter(date >= start_date, date < end_date, IDIndividual1 == MaleID) %>%
+        filter(date >= start_date, date < end_date, AnimalCode == MaleID) %>%
         nrow()
 
       count
@@ -101,7 +103,7 @@ cros_sex <- cros_sex %>%
       # - Only count rows where the focal individual's name equals the ID.
       # (Change "focal" to another column if needed.)
       count <- sex_df %>%
-        filter(date >= start_date, date < end_date, IDIndividual1 == MaleID) %>%
+        filter(date >= start_date, date < end_date, AnimalCode == MaleID) %>%
         nrow()
 
       count
@@ -115,6 +117,6 @@ cros_sex <- cros_sex %>%
   Mount = ifelse(is.na(Mount), 0, Mount)) %>%
   distinct()
 
-sexualinteractions_df <- cros_sex %>% dplyr::select(Date, Group, IDIndividual1, mount_last12, mount_coming12, Mount) %>% distinct()
+sexualinteractions_df <- cros_sex %>% dplyr::select(Date, Group, AnimalCode, mount_last12, mount_coming12, Mount) %>% distinct()
 
-write.csv(sexualinteractions_df, "/Users/mariagranell/Repositories/elo-sociality/sexual/OutputFiles/SexualInteractions_vigilance_MS.csv", row.names = F)
+write.csv(sexualinteractions_df, "/Users/mariagranell/Repositories/elo-sociality/sexual/OutputFiles/SexualInteractions_bge_MS.csv", row.names = F)

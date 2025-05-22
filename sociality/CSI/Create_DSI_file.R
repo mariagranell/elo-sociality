@@ -6,33 +6,44 @@ library(readr)
 library(tidyr)
 library(splitstackshape)
 library(purrr)
+source('/Users/mariagranell/Repositories/data/functions.R')
+
+# Parameters
+MSGroups = c("AK", "BD", "KB", "NH", "LT")
 
 # Create latest files ####
+# data -----------
+{
 # Focal
-f_new <- read.csv("G:/Other computers/New laptop/PhD/IVP DATA/Shared stakes/Cleaned_focal.csv")
-f_new$Date <- as.Date(format(as.POSIXct(f_new$Date, format = "%Y-%m-%d"), "%Y-%m-%d"))
+#f_new <- read.csv("G:/Other computers/New laptop/PhD/IVP DATA/Shared stakes/Cleaned_focal.csv")
+f_new <- read.csv("/Users/mariagranell/Repositories/male_services_index/MSpublication/CleanFiles/Cleaned_focal_allmyfiles.csv") %>%
+  mutate(Date = ymd(Date))
 
 # Ad lib
-a_new <- read.csv("G:/Other computers/New laptop/PhD/IVP DATA/Shared stakes/Affiliative.CSV")
-a_new$Date <- as.Date(format(as.POSIXct(a_new$Date, format = "%Y/%m/%d"), "%Y-%m-%d"))
+#a_new <- read.csv("G:/Other computers/New laptop/PhD/IVP DATA/Shared stakes/Affiliative.CSV")
+a_new <- read.csv("/Users/mariagranell/Repositories/male_services_index/MSpublication/CleanFiles/affiliative_allmyfiles.csv") %>%
+  mutate(Date = ymd(Date))
 
 # Scan
-s_new <- read.csv("G:/Other computers/New laptop/PhD/IVP DATA/Shared stakes/Scan.CSV")
-s_new$Date <- as.Date(format(as.POSIXct(s_new$Date, format = "%Y/%m/%d"), "%Y-%m-%d"))
+#s_new <- read.csv("G:/Other computers/New laptop/PhD/IVP DATA/Shared stakes/Scan.CSV")
+s_new <- read.csv("/Users/mariagranell/Repositories/male_services_index/MSpublication/CleanFiles/scan_allmyfiles.csv")%>%
+  mutate(Date = ymd(Date))
+
+}
 
 ## CREATING *FOCAL* DATA FILE DSI ####
 # Remove spaces before behaviours
 # Replace empty Behaviours with "Unknown"
 # Only select applicable groups
 f_sb <- f_new %>% 
-  filter(Group %in% c("Ankhase", "Baie Dankie", "Noha")) %>%
+  filter(Group %in% MSGroups) %>%
   mutate(Behaviour = sub(" ", "", Behaviour),
          Behaviour = ifelse(nchar(Behaviour) == 0, "Unknown", Behaviour))
 
 # Select affiliative only interactions
-# Create a new row for every "."
+# Create a new row for every ".", warnings are ok
 f <- f_sb %>%
-  filter(Behaviour %in% c("Affiliative")) %>%
+  filter(Behaviour %in% "Affiliative") %>%
   cSplit(., "BehaviourFocal", ".", "long") %>%
   cSplit(., "BehaviourFocal", " ", "long") %>%
   mutate(BehaviourFocal = sub(" ", "", BehaviourFocal))
@@ -57,48 +68,54 @@ f <- f %>%
   mutate(Behaviour = ifelse(Behaviour %in% c('sg', 'sw', 'bsg', 'bsw'), "Contact.focal", Behaviour)) %>%
   mutate(Behaviour = ifelse(Behaviour %in% c('ap', 'bap'), "Approach", Behaviour))
 
-write.csv(f, "G:/Other computers/New laptop/PhD/IVP DATA/Shared stakes/Focal_DSI.CSV", row.names = F)
+#write.csv(f, "G:/Other computers/New laptop/PhD/IVP DATA/Shared stakes/Focal_DSI.CSV", row.names = F)
   
 #### CREATING *AD-LIB* DSI FILE ####
-old <- read.csv("C:/Users/josef/Documents/PhD/IVP DATA/Shared stakes/Old_Affiliative_cleaned.CSV")
-old <- read.csv("G:/Other computers/New laptop/PhD/IVP DATA/Shared stakes/Old_Affiliative_cleaned.CSV")
-
+#old <- read.csv("C:/Users/josef/Documents/PhD/IVP DATA/Shared stakes/Old_Affiliative_cleaned.CSV")
+#old <- read.csv("G:/Other computers/New laptop/PhD/IVP DATA/Shared stakes/Old_Affiliative_cleaned.CSV")
+old <- read.csv("/Users/mariagranell/Repositories/data/Oct2021-May2022/Social_10.2021-05.2022.csv") %>%
+  dplyr::select(Date, Group, Context,
+                IDIndividual1 = Individual1, IDIndividual2 = Individual2, BehaviourIndiv1 = BehaviourIndividual1, BehaviourIndiv2 = BehaviourIndividual2,
+                IDIndividual3 = Individual3, IDIndividual4 = Individual4, BehaviourIndiv3 = BehaviourIndividual3, BehaviourIndiv4 = BehaviourIndividual4,
+                IDIndividual5 = Individual5, IDIndividual6 = Individual6, BehaviourIndiv5 = BehaviourIndividual5, BehaviourIndiv6 = BehaviourIndividual6) %>%
+  change_group_names(.,"Group") %>%
+  mutate(Date = mdy(Date))
 
 # Remove unusable contexts
-iffy_contexts <- c("BGE", "Experiment", "BoxExperiment", "Agonistic", "Other")
-a_new <- a_new %>%
-  filter(!Context %in% iffy_contexts, !DataInfo %in% c("Delete", NA_character_)) 
+iffy_contexts <- c("BGE", "bge", "Experiment", "BoxExperiment", "Agonistic", "Other", "alarm call, raups", "bgd", "see conflict form at this time")
+a_new2 <- a_new %>%
+  dplyr::select(Date, Group, Context,
+                IDIndividual1, IDIndividual2, BehaviourIndiv1, BehaviourIndiv2,
+                IDIndividual3, IDIndividual4, BehaviourIndiv3, BehaviourIndiv4,
+                IDIndividual5, IDIndividual6, BehaviourIndiv5, BehaviourIndiv6) %>%
+  rbind(.,old) %>%
+  filter(!Context %in% iffy_contexts)
 
 # Keep interactions with ID3 etc
-int1 <- a_new %>% 
-  dplyr::select(Date, Group, IDIndividual1, IDIndividual2, BehaviourIndiv1, BehaviourIndiv2
-  ) %>%
+int1 <- a_new2 %>%
+  dplyr::select(Date, Group, IDIndividual1, IDIndividual2, BehaviourIndiv1, BehaviourIndiv2) %>%
   filter(!IDIndividual1 == "", !IDIndividual2 == "")
 
-int2 <- a_new %>% 
-  dplyr::select(Date, Group, IDIndividual3, IDIndividual4, BehaviourIndiv3, BehaviourIndiv4
-  ) %>%
-  filter(!IDIndividual3 == "", !IDIndividual4 == ""
-  ) %>%
+int2 <- a_new2 %>%
+  dplyr::select(Date, Group, IDIndividual3, IDIndividual4, BehaviourIndiv3, BehaviourIndiv4) %>%
+  filter(!IDIndividual3 == "", !IDIndividual4 == "") %>%
   rename(IDIndividual1 = IDIndividual3, 
          BehaviourIndiv1 = BehaviourIndiv3, 
          IDIndividual2 = IDIndividual4, 
          BehaviourIndiv2 = BehaviourIndiv4)
 
-int3 <- a_new %>% 
-  dplyr::select(Date, Group, IDIndividual5, IDIndividual6, BehaviourIndiv5, BehaviourIndiv6
-) %>%
-  filter(!IDIndividual5 == "", !IDIndividual6 == ""
-  ) %>%
+int3 <- a_new2 %>%
+  dplyr::select(Date, Group, IDIndividual5, IDIndividual6, BehaviourIndiv5, BehaviourIndiv6) %>%
+  filter(!IDIndividual5 == "", !IDIndividual6 == "") %>%
   rename(IDIndividual1 = IDIndividual5, 
          BehaviourIndiv1 = BehaviourIndiv5, 
          IDIndividual2 = IDIndividual6, 
          BehaviourIndiv2 = BehaviourIndiv6)
 
-combined <- rbind(int1, int2, int3, old)
+combined <- rbind(int1, int2, int3)
 
 a <- combined %>% 
-  filter(Group %in% c("Ankhase", "Baie Dankie", "Noha"),
+  filter(Group %in% MSGroups,
          Date > "2017-01-01")
 
 # Create a new row for every "."
@@ -139,8 +156,8 @@ a <- a %>%
   mutate(BehaviourFocal = ifelse(BehaviourFocal %in% c("sg", "sw"), "Contact", BehaviourFocal)) %>%
   mutate(BehaviourFocal = ifelse(BehaviourFocal %in% c("ap", "bap"), "Approach", BehaviourFocal))
 
-write.csv(a, "G:/Other computers/New laptop/PhD/IVP DATA/Shared stakes/Affiliative_DSI.CSV", row.names = F)
-write.csv(a, "C:/Users/josef/Documents/PhD/IVP DATA/Shared stakes/Affiliative_DSI.CSV", row.names = F)
+#write.csv(a, "G:/Other computers/New laptop/PhD/IVP DATA/Shared stakes/Affiliative_DSI.CSV", row.names = F)
+#write.csv(a, "C:/Users/josef/Documents/PhD/IVP DATA/Shared stakes/Affiliative_DSI.CSV", row.names = F)
 
 #### CREATING *PROXIMITY* DSI FILE ####
 
@@ -152,47 +169,45 @@ write.csv(a, "C:/Users/josef/Documents/PhD/IVP DATA/Shared stakes/Affiliative_DS
 # use both behaviour and distance
 
 s <- s_new %>% 
-  filter(Group %in% c("Ankhase", "Baie Dankie", "Noha"))
+  filter(Group %in% MSGroups)
 
 # Function to clean nearest neighbors data
 clean_nearest_neighbors <- function(df) {
   df %>%
-    rowwise() %>%
-    mutate(
-      IndArmLength = ifelse(DistanceNNA %in% c("Contact", "Arm length") & !(NNAdult %in% strsplit(IndArmLength, "[; ]")[[1]]), 
-                            paste(IndArmLength, NNAdult, sep = ifelse(nchar(IndArmLength) > 0, "; ", "")), IndArmLength),
-      IndArmLength = ifelse(DistanceNNJ %in% c("Contact", "Arm length") & !(NNJuvenile %in% strsplit(IndArmLength, "[; ]")[[1]]), 
-                            paste(IndArmLength, NNJuvenile, sep = ifelse(nchar(IndArmLength) > 0, "; ", "")), IndArmLength),
-      Ind2m = ifelse(DistanceNNA %in% c("1m", "2m") & !(NNAdult %in% strsplit(Ind2m, "[; ]")[[1]]), 
-                     paste(Ind2m, NNAdult, sep = ifelse(nchar(Ind2m) > 0, "; ", "")), Ind2m),
-      Ind2m = ifelse(DistanceNNJ %in% c("1m", "2m") & !(NNJuvenile %in% strsplit(Ind2m, "[; ]")[[1]]), 
-                     paste(Ind2m, NNJuvenile, sep = ifelse(nchar(Ind2m) > 0, "; ", "")), Ind2m),
-      Ind5m = ifelse(DistanceNNA %in% c("3m", "4m", "5m") & !(NNAdult %in% strsplit(Ind5m, "[; ]")[[1]]), 
-                     paste(Ind5m, NNAdult, sep = ifelse(nchar(Ind5m) > 0, "; ", "")), Ind5m),
-      Ind5m = ifelse(DistanceNNJ %in% c("3m", "4m", "5m") & !(NNJuvenile %in% strsplit(Ind5m, "[; ]")[[1]]), 
-                     paste(Ind5m, NNJuvenile, sep = ifelse(nchar(Ind5m) > 0, "; ", "")), Ind5m)
+    dplyr::rowwise() %>%
+    dplyr::mutate(
+      IndArmLength = ifelse(DistanceNNA %in% c("Contact", "Arm length") & !(NNAdult %in% strsplit(IndArmLength, "[; ]")[[1]]),
+                            paste(IndArmLength, NNAdult, sep = ifelse(!is.na(IndArmLength) & nchar(IndArmLength) > 0, "; ", "")), IndArmLength),
+      IndArmLength = ifelse(DistanceNNJ %in% c("Contact", "Arm length") & !(NNJuvenile %in% strsplit(IndArmLength, "[; ]")[[1]]),
+                            paste(IndArmLength, NNJuvenile, sep = ifelse(!is.na(IndArmLength) & nchar(IndArmLength) > 0, "; ", "")), IndArmLength),
+      Ind2m = ifelse(DistanceNNA %in% c("1m", "2m") & !(NNAdult %in% strsplit(Ind2m, "[; ]")[[1]]),
+                     paste(Ind2m, NNAdult, sep = ifelse(!is.na(Ind2m) & nchar(Ind2m) > 0, "; ", "")), Ind2m),
+      Ind2m = ifelse(DistanceNNJ %in% c("1m", "2m") & !(NNJuvenile %in% strsplit(Ind2m, "[; ]")[[1]]),
+                     paste(Ind2m, NNJuvenile, sep = ifelse(!is.na(Ind2m) & nchar(Ind2m) > 0, "; ", "")), Ind2m),
+      Ind5m = ifelse(DistanceNNA %in% c("3m", "4m", "5m") & !(NNAdult %in% strsplit(Ind5m, "[; ]")[[1]]),
+                     paste(Ind5m, NNAdult, sep = ifelse(!is.na(Ind5m) & nchar(Ind5m) > 0, "; ", "")), Ind5m),
+      Ind5m = ifelse(DistanceNNJ %in% c("3m", "4m", "5m") & !(NNJuvenile %in% strsplit(Ind5m, "[; ]")[[1]]),
+                     paste(Ind5m, NNJuvenile, sep = ifelse(!is.na(Ind5m) & nchar(Ind5m) > 0, "; ", "")), Ind5m)
     ) %>%
-    ungroup()
+    dplyr::ungroup()
 }
+
 
 # Apply the cleaning function to the dataframe
 s <- clean_nearest_neighbors(s)
 
 # Remove interactions with "InterObs" == "Yes" and select relevant columns
-s <- s %>%
-  filter(InterObs != "Yes") %>%
+s1 <- s %>%
   dplyr::select(Date, Group, Time, IDIndividual1, Behaviour, BehaviourType, IDPartners, IndArmLength, Ind2m, Ind5m) %>%
   mutate(Time = format(as.POSIXct(Time, format = "%H:%M:%S"), "%H:%M:%S")) %>%
   filter(!is.na(IDIndividual1), IDIndividual1 != "")
 
 # Load in old data and merge
-s_old <- read.csv("G:/Other computers/New laptop/PhD/IVP DATA/Shared stakes/Scan_old_cleaned.CSV")
-s_old$Date <- as.Date(format(as.POSIXct(s_old$Date, format = "%m/%d/%Y"), "%Y-%m-%d"))
+#s_old <- read.csv("G:/Other computers/New laptop/PhD/IVP DATA/Shared stakes/Scan_old_cleaned.CSV")
+# too annoying to do the s_old into scan data. I will just merge what I already have from josie
+#s_old <- read.csv("/Users/mariagranell/Repositories/data/Oct2021-May2022/Scan_10.2021-05.2022.csv")
 
-s_old <- s_old %>%
-  dplyr::select(Date, Group, Time, IDIndividual1, Behaviour, BehaviourType, IDPartners, IndArmLength, Ind2m, Ind5m)
-
-s_complete <- rbind(s, s_old)
+s_complete <- s #rbind(s, s_old)
 
 # Select affiliative interactions for behaviour data
 b <- s_complete %>%
@@ -333,21 +348,16 @@ str(prox)
 write.csv(prox, "G:/Other computers/New laptop/PhD/IVP DATA/Shared stakes/Scan_DSI.CSV", row.names = F)
 
 ### Merge all three files ####
-f <- read.csv("C:/Users/josef/Documents/PhD/IVP DATA/Shared stakes/Focal_DSI.CSV")
-a <- read.csv("C:/Users/josef/Documents/PhD/IVP DATA/Shared stakes/Affiliative_DSI.CSV")
-prox <- read.csv("C:/Users/josef/Documents/PhD/IVP DATA/Shared stakes/Scan_DSI.CSV")
+#f <- read.csv("C:/Users/josef/Documents/PhD/IVP DATA/Shared stakes/Focal_DSI.CSV")
+#a <- read.csv("C:/Users/josef/Documents/PhD/IVP DATA/Shared stakes/Affiliative_DSI.CSV")
+#prox <- read.csv("C:/Users/josef/Documents/PhD/IVP DATA/Shared stakes/Scan_DSI.CSV")
 
-f <- read.csv("G:/Other computers/New laptop/PhD/IVP DATA/Shared stakes/Focal_DSI.CSV")
-a <- read.csv("G:/Other computers/New laptop/PhD/IVP DATA/Shared stakes/Affiliative_DSI.CSV")
-prox <- read.csv("G:/Other computers/New laptop/PhD/IVP DATA/Shared stakes/Scan_DSI.CSV")
+#f <- read.csv("G:/Other computers/New laptop/PhD/IVP DATA/Shared stakes/Focal_DSI.CSV")
+#a <- read.csv("G:/Other computers/New laptop/PhD/IVP DATA/Shared stakes/Affiliative_DSI.CSV")
+#prox <- read.csv("G:/Other computers/New laptop/PhD/IVP DATA/Shared stakes/Scan_DSI.CSV")
 
 # First make sure that in ad lib and scans our experimental individuals are always focals: 
 # Focals are experimental individuals 
-# Create a list with all individuals that performed box experiment
-# Work PC:
-ind <- read.csv("G:/Other computers/New laptop/PhD/IVP DATA/Shared stakes/BoxExperiment.csv") 
-# Laptop:
-ind <- read.csv("C:/Users/josef/Documents/PhD/IVP DATA/Shared stakes/BoxExperiment.csv")
 
 # Convert Date to proper format and filter data
 ind <- ind %>%

@@ -12,8 +12,10 @@ setwd("/Users/mariagranell/Repositories/elo-sociality/sociality/CSI")
 # BASIC DATA : -----------------------
 {
 # dsi is the social data, you need a Date, Focal, Actor, Receiver, BehaviourFocal, Duration, Group
-dsi <- read.csv("/Users/mariagranell/Repositories/elo-sociality/sociality/data/Social_data_20211002_20240907.csv") %>%
-  mutate(Focal = Actor, BehaviourFocal = BehaviourActor, Duration = NA)
+dsi <- read.csv("/Users/mariagranell/Repositories/elo-sociality/sociality/data/Social_data_20211001_20250327.csv") %>%
+  mutate(Focal = Actor, BehaviourFocal = Behaviour, Duration = NA) %>% distinct() %>%
+  dplyr::select(Group, Date, Time, Obs.nr, IntOrder = Source, Actor, Receiver, BehaviourActor = Behaviour, Focal, BehaviourFocal, Duration)
+
 OT <- read.csv("/Users/mariagranell/Repositories/data/presence_ot/PresenceData_ot_2021-2025_logbook/OutputFiles/OT_LB.csv")
 # presence calculated in here: /Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/Presence_dplyr.R
 presence_list <- list(
@@ -38,11 +40,10 @@ OT <- OT %>% rename(focal = Focal, date = Date)
 
 # FILE WHERE YOU WANT YOUR CSI CALCULATED -----------
 # should have AnimalCode, Group and Date for all the dates you´d like
-saliva <- #read.csv("/Users/mariagranell/Repositories/hormones/hormone_saliva/What-s-in-saliva-/Data/OutputFiles/Data_Modelling.csv") %>%
-  read.csv("/Users/mariagranell/Repositories/hormones/hormone_saliva/What-s-in-saliva-/Data/OriginalFiles/Saliva_Complete.csv") %>%
-    mutate(across(where(is.character), ~ ifelse(. %in% c("", "NA"), NA, .)))  %>%
-  dplyr::select(AnimalCode = id, Group = group, Date = date) %>% filter(!is.na(Date), !is.na(AnimalCode)) %>%
-    mutate( AnimalCode = str_to_title(AnimalCode))
+bge <- read.csv("/Users/mariagranell/Repositories/male_services_index/MSpublication/OutputFiles/bge_maleservices_basedf.csv") %>%
+  filter(Age_class %in% "adult", Group %in% c("AK", "BD", "KB", "NH")) %>%
+  dplyr::select(AnimalCode, Group = Group, Date = Date) %>%
+  drop_na() %>% distinct()
 
 # STEP 1. ADD EMPTY OT -----------------
 # Identify dates and focals in `dsi` but not in `OT`, otherwise, assign the average OT
@@ -64,7 +65,7 @@ missing_focals <- dsi %>%
 # Step 1: Calculate mean OT per group
 mean_OT_per_group <- OT %>%
   group_by(Group) %>%
-  summarize(mean_OT = mean(OT, na.rm = TRUE))
+  dplyr::summarize(mean_OT = mean(OT, na.rm = TRUE))
 
 # Step 2: Merge missing records with mean OT
 missing_records_with_OT <- missing_focals %>%
@@ -146,7 +147,7 @@ rm(pres_subset, ot_subset, dsi_subset, individuals)
 }
 
 # STEP 4. PREPARE DF TO CONTAIN CSI ---------
-df_csi_results <- saliva %>% #darting_sheet %>%
+df_csi_results <- bge %>% #darting_sheet %>%
   mutate(Start_CSIdaterange =  ymd(Date) %m-% days(6),   # define X time as the limit of social interactions you allow for, in this case 6 month
          End_CSIdaterange = ymd(Date)) %>%
   filter(Group %in% habituated_groups)
@@ -171,11 +172,11 @@ calculate_csi <- function(indiv, group, Start_CSIdaterange, End_CSIdaterange) {
     start_date <- floor_date(end_date %m-% months(7), unit = "month") + days(day(end_date) - 1)
 
     # Filter the SEQ, OT, and presence data for the applicable group
-    SEQ <- SEQ_list[[group]] %>% rename_with(tolower)
+    SEQ <- SEQ_list[[group]]
     OT <- OT_list[[group]]
     pres <- pres_list[[group]]
 
-    SEQ_subset <- SEQ[SEQ$date >= start_date & SEQ$date <= end_date, ]
+    SEQ_subset <- SEQ[SEQ$date >= start_date & SEQ$date <= end_date, ] %>% rename_with(tolower)
     OT_subset <- OT[OT$date >= start_date & OT$date <= end_date, ]
 
     # Check presence on the End_CSIdaterange date
@@ -285,4 +286,4 @@ df_csi_results_checked <- df_csi_results %>%
  rm(gp, OT, presence_data, updated_OT)
 
 # STEP 8. SAVE
-write.csv(df_csi_results_checked,"/Users/mariagranell/Repositories/elo-sociality/sociality/CSI/OutputData/whastinsalivaCSI.csv", row.names = FALSE)
+write.csv(df_csi_results_checked,"/Users/mariagranell/Repositories/male_services_index/MSpublication/OutputFiles/CSI_bge_maleservices.csv", row.names = FALSE)

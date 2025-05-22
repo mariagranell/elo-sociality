@@ -18,6 +18,9 @@ source('/Users/mariagranell/Repositories/data/functions.R')
 # path ------------------------
 setwd("/Users/mariagranell/Repositories/elo-sociality/sexual")
 
+# parameters ---
+groups = c("NH", "BD", "LT", "KB", "AK")
+
 # data ------------------------
 {
 lh <- read.csv("/Users/mariagranell/Repositories/data/life_history/tbl_Creation/TBL/fast_factchecked_LH.csv")
@@ -41,6 +44,10 @@ pd3 <- read.csv("/Users/mariagranell/Repositories/data/Jakobcybertrackerdatafile
   dplyr::select(Date, Group, IDIndividual1, BehaviourIndiv1, IDIndividual2, BehaviourIndiv2, Complete) %>%
   rename_with(tolower)
 
+  pd4 <- read.csv("/Users/mariagranell/Repositories/male_services_index/MSpublication/CleanFiles/sexual_allmyfiles.csv")%>%
+  dplyr::select(Date, Group, IDIndividual1, BehaviourIndiv1, IDIndividual2, BehaviourIndiv2, Complete) %>%
+  rename_with(tolower)
+
 focal <- read.csv("/Users/mariagranell/Repositories/data/Jakobcybertrackerdatafiles/OriginalFiles/Focal_cybertracker.csv") %>%
    rename_with(tolower) %>%
   filter(behaviour == "Sexual",
@@ -52,11 +59,11 @@ focal <- read.csv("/Users/mariagranell/Repositories/data/Jakobcybertrackerdatafi
          date = as.Date(date))
 }
 
-rbind(pd, pd2, pd3, focal) %>% distinct() %>%
+rbind(pd, pd2, pd3, pd4, focal) %>% distinct() %>%
   add_season(.,"date") %>%
   plot_weekly_summary(., "data", "date")
 
-sex_combination <- rbind(pd, pd2, focal) %>% distinct() %>%
+sex_combination <- rbind(pd, pd2, pd3, pd4, focal) %>% distinct() %>%
   mutate(date = ymd(date)) %>%
   mutate(
     across(behaviourindiv1, tolower),

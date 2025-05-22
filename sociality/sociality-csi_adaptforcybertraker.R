@@ -22,6 +22,9 @@ library(hms)
 # path ------------------------
 setwd('/Users/mariagranell/Repositories/elo-sociality/sociality')
 
+# Parameters
+MSGroups = c("AK", "BD", "KB", "NH", "LT")
+
 # social data ------------------------
 {social1 <- read.csv('/Users/mariagranell/Repositories/elo-sociality/data/Social_10.2021-05.2022.csv') %>%
   mutate(Date = as.character(mdy(Date)), Data = "Affiliative") %>% add_season("Date") %>%
@@ -43,11 +46,25 @@ setwd('/Users/mariagranell/Repositories/elo-sociality/sociality')
     DataInfo = Def,
     DeviceID = RecordId
   ) %>% mutate(OtherContext = NA )
-social2 <- read.csv("/Users/mariagranell/Repositories/data/Jakobcybertrackerdatafiles/CleanFiles/affiliative_cybertracker.csv")
-social <- rbind(social1, social2)}
+social2 <- read.csv("/Users/mariagranell/Repositories/data/Jakobcybertrackerdatafiles/CleanFiles/affiliative_cybertracker.csv") %>%
+  dplyr::select(
+  Data, Date, Time, Group, Season, Context,
+  OtherContext, IDIndividual1, IDIndividual2, BehaviourIndiv1, BehaviourIndiv2,
+  IDIndividual3, IDIndividual4, BehaviourIndiv3, BehaviourIndiv4,
+  IDIndividual5, IDIndividual6, BehaviourIndiv5, BehaviourIndiv6,
+  Remarks, Remarks1, Remarks2, Remarks3, DataInfo, DeviceID)
+social3 <- read.csv("/Users/mariagranell/Repositories/male_services_index/MSpublication/CleanFiles/affiliative_allmyfiles.csv") %>%
+  add_season("Date") %>%
+  dplyr::select(
+  Data, Date, Time, Group, Season, Context,
+  OtherContext, IDIndividual1, IDIndividual2, BehaviourIndiv1, BehaviourIndiv2,
+  IDIndividual3, IDIndividual4, BehaviourIndiv3, BehaviourIndiv4,
+  IDIndividual5, IDIndividual6, BehaviourIndiv5, BehaviourIndiv6,
+  Remarks, Remarks1, Remarks2, Remarks3, DataInfo, DeviceID)
+social <- rbind(social1, social2, social3) %>% distinct()}
 
 # check data with plot
-social %>% mutate(Date = ymd(Date) ) %>%add_season("Date") %>% mutate(Data = "ot") %>%
+social %>% mutate(Date = ymd(Date)) %>% mutate(Data = "ot") %>%
   #filter(Group == "KB") %>%
   plot_weekly_summary("Data", "Date")
 
@@ -206,6 +223,23 @@ sc <- ak %>% rbind(bd,nh,lt,kb,cr)
 rm(ak,bd,nh,lt,kb,cr)
 }
 
+# Join with cybertaker scans
+sc_to_merge <- sc %>%
+  dplyr::select(Date, Group, Time, IDIndividual, Activity, Affiliative,
+  Partner, NearestNeighbour, DistanceToNeighbour, NearestJuvenileNeighbour,
+  DistanceToNeighbourJuvM,
+  AdultsIn1m, JuvsIn1m, AdultsIn2m, JuvsIn2m, AdultsIn5m, JuvsIn5m, Remarks
+)
+sc_cybertracker <- read.csv("/Users/mariagranell/Repositories/male_services_index/MSpublication/CleanFiles/scan_allmyfiles.csv") %>%
+  dplyr::select(
+  Date, Group, Time, IDIndividual = IDIndividual1, Activity = Behaviour, Affiliative = BehaviourType,
+  Partner = IDPartners, NearestNeighbour = NNAdult, DistanceToNeighbour = DistanceNNA, NearestJuvenileNeighbour = NNJuvenile,
+  DistanceToNeighbourJuvM = DistanceNNJ,
+  AdultsIn1m = IndArmLength, AdultsIn2m = Ind2m, AdultsIn5m = Ind5m, Remarks) %>%
+  mutate(JuvsIn5m= NA,JuvsIn2m = NA, JuvsIn1m = NA)
+
+sc <- rbind(sc_to_merge, sc_cybertracker)%>% distinct()
+
 # create obs number
 obs.nr <- 1
 for(i in seq_along(sc$Date)){
@@ -243,6 +277,51 @@ sc <- sc %>%
   filter(!(n() > 1 & any(!str_detect(distance, "Near"))) | !str_detect(distance, "Near")) %>%
   ungroup()
 
+## CREATING *FOCAL* DATA FILE DSI ####
+
+# Focal
+#f_new <- read.csv("G:/Other computers/New laptop/PhD/IVP DATA/Shared stakes/Cleaned_focal.csv")
+f_new <- read.csv("/Users/mariagranell/Repositories/male_services_index/MSpublication/CleanFiles/Cleaned_focal_allmyfiles.csv") %>%
+  mutate(Date = ymd(Date))
+
+# Remove spaces before behaviours
+# Replace empty Behaviours with "Unknown"
+# Only select applicable groups
+f_sb <- f_new %>%
+  filter(Group %in% MSGroups) %>%
+  mutate(Behaviour = sub(" ", "", Behaviour),
+         Behaviour = ifelse(nchar(Behaviour) == 0, "Unknown", Behaviour))
+
+# Select affiliative only interactions
+# Create a new row for every ".", warnings are ok
+f <- f_sb %>%
+  filter(Behaviour %in% "Affiliative") %>%
+  cSplit(., "BehaviourFocal", ".", "long") %>%
+  cSplit(., "BehaviourFocal", " ", "long") %>%
+  mutate(BehaviourFocal = sub(" ", "", BehaviourFocal))
+
+# Define active behaviours
+active_beh <- c('gr', 'mc', 'pr', 'sg', 'ap', 'ag', 'le', 'ig', 'sm', 'fo', 'is', 'to', 'ls',
+                'sw', 'nu', 'vo', 'wb', 'amc', 'bp', 'SG', 'ge', 'hh', 'mu', 'hg', 'tc', 'ato')
+
+
+ssf <- f %>%
+  # Determine Actor and Receiver
+  mutate(
+    Actor = ifelse(BehaviourFocal %in% active_beh, IDIndividual1, IDIndividual2),
+    Receiver = ifelse(BehaviourFocal %in% active_beh, IDIndividual2, IDIndividual1)
+  ) %>%
+# Put in the right format and remove rows with missing values
+  filter(IDIndividual1 != "", IDIndividual2 != "", BehaviourFocal != "") %>%
+  mutate(Source = "focal") %>%
+  dplyr::select(Group, Date, Time, Obs.nr, Actor, Receiver, Behaviour = BehaviourFocal, Source) %>%
+  mutate(Behaviour = ifelse(Behaviour %in% c('gr', 'bgr'), "Groom.focal", Behaviour)) %>%
+  mutate(Behaviour = ifelse(Behaviour %in% c('sg', 'sw', 'bsg', 'bsw'), "Contact.focal", Behaviour)) %>%
+  mutate(Behaviour = ifelse(Behaviour %in% c('ap', 'bap'), "Approach", Behaviour)) %>%
+  mutate(Date = as.character(ymd(Date))) %>%
+  distinct()
+
+
 #### SOCIAL BONDS PACKAGE ########
 # To create a file for the social bonds package you have:
 # A file with behaviour. That contains the collumns: Date, Actor, Reciever and Behaviour
@@ -258,22 +337,25 @@ library(socialindices2)
 
 # changing scans data to have Date, Actor, Reciever and Behaviour
 sca <- sc %>% mutate(Source = "scan") %>%
-  dplyr::select(Group, Date, Time, Obs.nr, IDIndividual, neighbour, distance, Source) %>%
-  rename(Actor = IDIndividual,
-         Receiver = neighbour,
-         Behaviour = distance
-  ) %>%
+  dplyr::select( Date, Time, Group, Obs.nr, Actor = IDIndividual, Receiver = neighbour, Behaviour =distance, Source) %>%
   change_group_names("Group") %>%
-  integrate_otherid(Actor, Receiver)
+  integrate_otherid(Actor, Receiver) %>%
+  correct_pru_que_mess("Actor", "Date", "Group") %>%
+  correct_pru_que_mess("Receiver", "Date", "Group") %>%
+  mutate(Date = as.character(ymd(Date)))
 
 # merge both
 {ssc <- ss %>% mutate(Source = "adlib") %>%
-  dplyr::select(Group, Date, Time, Obs.nr, Actor, Receiver, BehaviourActor, Source) %>%
-  rename(Behaviour = BehaviourActor) %>%
-  mutate(Group = ifelse(Group == "Crossing,", "Crossing", Group)) %>%
-  rbind(., sca) %>%
+  dplyr::select(Group, Date, Time, Obs.nr, Actor, Receiver, Behaviour = BehaviourActor, Source) %>%
+  mutate(Group = ifelse(Group %in% c("Crossing,", "Crossingpl"), "CR", Group),
+         Date = as.character(ymd(Date))) %>%
+  rbind(., sca, ssf) %>%
   mutate(Focal = Actor) %>%
-  filter(Behaviour != "bagr")
+  filter(Behaviour != "bagr") %>%
+  distinct() %>%
+  dplyr::group_by(across(-Time)) %>%
+  dplyr::slice(1) %>%
+  dplyr::ungroup()
 
 rm(sca)}
 table(ssc$Group)
@@ -281,8 +363,8 @@ table(ssc$Group)
 ssc%>% group_by(Group) %>% summarize(n = n())
 range(ss$Date)
 max(ssc$Date)
-# TODO I REMOVED THE SCANS DATA.
-write.csv(ss, "/Users/mariagranell/Repositories/elo-sociality/sociality/data/Social_data_20211002_20240907.csv", row.names = F)
+# I MERGED ALL THE DATA I COULD
+write.csv(ssc, "/Users/mariagranell/Repositories/elo-sociality/sociality/data/Social_data_20211001_20250327.csv", row.names = F)
 
 
 ### perform CSI ###

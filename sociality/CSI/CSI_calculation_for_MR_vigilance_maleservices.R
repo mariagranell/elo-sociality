@@ -12,16 +12,18 @@ setwd("/Users/mariagranell/Repositories/elo-sociality/sociality/CSI")
 # BASIC DATA : -----------------------
 {
 # dsi is the social data, you need a Date, Focal, Actor, Receiver, BehaviourFocal, Duration, Group
-dsi <- read.csv("/Users/mariagranell/Repositories/elo-sociality/sociality/data/Social_data_20211002_20240907.csv") %>%
-  mutate(Focal = Actor, BehaviourFocal = BehaviourActor, Duration = NA)
-OT <- read.csv("/Users/mariagranell/Repositories/data/presence_ot/PresenceData_ot_2021-2024_logbook/OutputFiles/OT_LB.csv")
+dsi <- read.csv("/Users/mariagranell/Repositories/elo-sociality/sociality/data/Social_data_20211001_20250327.csv") %>%
+  mutate(Focal = Actor, BehaviourFocal = Behaviour, Duration = NA) %>% distinct() %>%
+  dplyr::select(Group, Date, Time, Obs.nr, IntOrder = Source, Actor, Receiver, BehaviourActor = Behaviour, Focal, BehaviourFocal, Duration)
+
+OT <- read.csv("/Users/mariagranell/Repositories/data/presence_ot/PresenceData_ot_2021-2025_logbook/OutputFiles/OT_LB.csv")
 # presence calculated in here: /Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/Presence_dplyr.R
 presence_list <- list(
-  KB = read.csv("/Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/PresenceData_KB2020-2024.csv"),
-  AK = read.csv("/Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/PresenceData_AK2020-2024.csv"),
-  NH = read.csv("/Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/PresenceData_NH2020-2024.csv"),
-  LT = read.csv("/Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/PresenceData_LT2020-2024.csv"),
-  BD = read.csv("/Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/PresenceData_BD2020-2024.csv")
+  KB = read.csv("/Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/PresenceData_KB2020-2025.csv"),
+  AK = read.csv("/Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/PresenceData_AK2020-2025.csv"),
+  NH = read.csv("/Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/PresenceData_NH2020-2025.csv"),
+  LT = read.csv("/Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/PresenceData_LT2020-2025.csv"),
+  BD = read.csv("/Users/mariagranell/Repositories/data/presence_ot/PresenceData_lh/PresenceData_BD2020-2025.csv")
 )
 lh <- read.csv("/Users/mariagranell/Repositories/data/life_history/tbl_Creation/TBL/fast_factchecked_LH.csv") %>% filter(!is.na(AnimalCode))
 }
@@ -38,17 +40,15 @@ OT <- OT %>% rename(focal = Focal, date = Date)
 
 # FILE WHERE YOU WANT YOUR CSI CALCULATED -----------
 # should have AnimalCode, Group and Date for all the dates you´d like
-vigilance <- read.csv("/Users/mariagranell/Repositories/data/acess_data/OutputData/vigilance_access.csv") %>%
-  left_join(lh[,c("AnimalCode", "Sex", "DOB_estimate", "Group_mb", "StartDate_mb", "EndDate_mb", "Tenure_type")],
-            by = c("IDIndividual1" = "AnimalCode", "Group" = "Group_mb"), relationship = "many-to-many") %>%
+vigilance <- #read.csv("/Users/mariagranell/Repositories/data/acess_data/OutputData/vigilance_access.csv") %>%
+  read.csv("/Users/mariagranell/Repositories/male_services_index/MSpublication/OutputFiles/vigilance_maleservices_basedf.csv") %>%
+  #left_join(lh[,c("AnimalCode", "Sex", "DOB_estimate", "Group_mb", "StartDate_mb", "EndDate_mb", "Tenure_type")], by = c("IDIndividual1" = "AnimalCode", "Group" = "Group_mb"), relationship = "many-to-many") %>%
   filter(Date > StartDate_mb & Date < EndDate_mb) %>%
   mutate(Age = add_age(DOB_estimate, Date, "Years"), # calculate their age based on the date of the focal
          Age_class = add_age_class(Age,Sex,Tenure_type)) %>%
   filter(Age_class %in% "adult", Group %in% c("AK", "BD", "KB", "NH")) %>%
   dplyr::select(AnimalCode = IDIndividual1, Group = Group, Date = Date) %>%
   drop_na()
-saliva <- read.csv("/Users/mariagranell/Repositories/hormones/hormone_saliva/What-s-in-saliva-/Data/OutputFiles/Data_Modelling.csv") %>%
-  dplyr::select(AnimalCode = id, Group = group, Date = date) %>% filter(!is.na(Date), !is.na(AnimalCode))
 
 # STEP 1. ADD EMPTY OT -----------------
 # Identify dates and focals in `dsi` but not in `OT`, otherwise, assign the average OT
@@ -181,7 +181,7 @@ calculate_csi <- function(indiv, group, Start_CSIdaterange, End_CSIdaterange) {
     OT <- OT_list[[group]]
     pres <- pres_list[[group]]
 
-    SEQ_subset <- SEQ[SEQ$date >= start_date & SEQ$date <= end_date, ]
+    SEQ_subset <- SEQ[SEQ$date >= start_date & SEQ$date <= end_date, ] %>% rename_with(tolower)
     OT_subset <- OT[OT$date >= start_date & OT$date <= end_date, ]
 
     # Check presence on the End_CSIdaterange date
