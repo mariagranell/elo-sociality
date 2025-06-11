@@ -36,6 +36,23 @@ pd <- read.csv("/Users/mariagranell/Repositories/data/Oct2021-May2022/Sexual_10.
          behaviourindiv2 = ReceptorBehaviour) %>%
   mutate(complete = NA,
          date = as.Date(date, format = "%m/%d/%Y"))
+
+pd1 <- read.csv("/Users/mariagranell/Repositories/data/Original_files/sexual_penndragon_18_to_22_for_maria.csv") %>%
+  dplyr::select(DateTime, Group, Initiator, InitiatorBehaviour, Receptor, ReceptorBehaviour) %>%
+  rename(date = DateTime,
+         group = Group,
+         idindividual1 = Initiator,
+         behaviourindiv1 = InitiatorBehaviour,
+         idindividual2 = Receptor,
+         behaviourindiv2 = ReceptorBehaviour) %>%
+  mutate(complete = NA,
+         date = as.Date(ymd_hms(date)),
+         behaviourindiv1 = str_to_lower(behaviourindiv1),
+         behaviourindiv2 = str_to_lower(behaviourindiv2)
+  )  %>%
+  mutate(across(where(is.character), ~ ifelse(. %in% c("", "NA"), NA, .)))
+
+
 pd2 <- read.csv("/Users/mariagranell/Repositories/data/acess_data/OutputData/sexual_access.csv")%>%
   dplyr::select(Date, Group, IDIndividual1, BehaviourIndiv1, IDIndividual2, BehaviourIndiv2, Complete) %>%
   rename_with(tolower)
@@ -44,7 +61,11 @@ pd3 <- read.csv("/Users/mariagranell/Repositories/data/Jakobcybertrackerdatafile
   dplyr::select(Date, Group, IDIndividual1, BehaviourIndiv1, IDIndividual2, BehaviourIndiv2, Complete) %>%
   rename_with(tolower)
 
-  pd4 <- read.csv("/Users/mariagranell/Repositories/male_services_index/MSpublication/CleanFiles/sexual_allmyfiles.csv")%>%
+pd4 <- read.csv("/Users/mariagranell/Repositories/male_services_index/MSpublication/CleanFiles/sexual_allmyfiles.csv")%>%
+  dplyr::select(Date, Group, IDIndividual1, BehaviourIndiv1, IDIndividual2, BehaviourIndiv2, Complete) %>%
+  rename_with(tolower)
+
+pd5 <- read_xls("/Users/mariagranell/Repositories/data/Original_files/Sexual_2024-06-25_2025-04-14.xls") %>%
   dplyr::select(Date, Group, IDIndividual1, BehaviourIndiv1, IDIndividual2, BehaviourIndiv2, Complete) %>%
   rename_with(tolower)
 
@@ -57,13 +78,35 @@ focal <- read.csv("/Users/mariagranell/Repositories/data/Jakobcybertrackerdatafi
   rename(behaviourindiv1 = behaviourfocal) %>%
   mutate(behaviourindiv2 = NA,
          date = as.Date(date))
+
+focal_2025jun <- read_xls("/Users/mariagranell/Repositories/data/Original_files/Focal_2024-06-25_2025-06-02.xls") %>%
+     rename_with(tolower) %>%
+  filter(behaviour == "Sexual",
+         #interobs == "No"
+  ) %>%
+  dplyr::select(date, group, idindividual1= indi1, behaviourfocal, idindividual2, complete) %>%
+  rename(behaviourindiv1 = behaviourfocal) %>%
+  mutate(behaviourindiv2 = NA,
+         date = as.Date(date))
+
+
+  all_data <- rbind(pd, pd1, pd2, pd3, pd4, pd5, focal, focal_2025jun) %>% distinct() %>%
+    change_group_names( "group")
 }
 
-rbind(pd, pd2, pd3, pd4, focal) %>% distinct() %>%
+all_data %>%
   add_season(.,"date") %>%
   plot_weekly_summary(., "data", "date")
 
-sex_combination <- rbind(pd, pd2, pd3, pd4, focal) %>% distinct() %>%
+# collect the first entry and the last entry date of each group
+range_sexual_data <- all_data %>%
+  group_by(group) %>%
+  summarise(min_date = min(date), max_date = max(date))
+
+write.csv(range_sexual_data, "/Users/mariagranell/Repositories/elo-sociality/sexual/OutputFiles/RangeSexualData.csv", row.names = F)
+
+# refine dataframe
+sex_combination <- all_data %>%
   mutate(date = ymd(date)) %>%
   mutate(
     across(behaviourindiv1, tolower),
@@ -91,7 +134,7 @@ sex_combination <- rbind(pd, pd2, pd3, pd4, focal) %>% distinct() %>%
   distinct()
 
 
-sex <- change_group_names(sex_combination, "group") %>%
+sex <- sex_combination %>%
   filter(group %in% groups,
          !is.na(MaleID),
          !is.na(FemaleID)) %>%

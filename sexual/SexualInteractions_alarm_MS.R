@@ -7,6 +7,7 @@ source('/Users/mariagranell/Repositories/data/functions.R')
 # data ------------------
 lh <- read.csv("/Users/mariagranell/Repositories/data/life_history/tbl_Creation/TBL/fast_factchecked_LH.csv")
 sex <- read.csv("/Users/mariagranell/Repositories/elo-sociality/sexual/OutputFiles/Sex_csi_combined_date.csv")
+range_sexual_data <- read.csv("/Users/mariagranell/Repositories/elo-sociality/sexual/OutputFiles/RangeSexualData.csv")
 
 # parameters ------------------
 MSgroups <- c("NH", "AK", "BD", "KB", "LT")
@@ -73,6 +74,7 @@ cros_sex <- cros_sex %>%
       # Get the dataframe for the corresponding group.
       # Make sure the group name in cros_sex matches the names in SEQ_list.
       sex_df <- SEQ_list[[Group]]
+      min_date <- range_sexual_data %>% filter(group == Group) %>% pull(min_date)
 
       # Define the date range: past 12 months (you can also use Date - 365 if you prefer)
       start_date <- Date %m-% months(12)
@@ -81,10 +83,12 @@ cros_sex <- cros_sex %>%
       # Filter the dataframe:
       # - Only consider rows where 'date' is within the last 12 months.
       # - Only count rows where the focal individual's name equals the ID.
+      # - Put NA if we don´t have enough behavioural coverage for 12 months
       # (Change "focal" to another column if needed.)
       count <- sex_df %>%
         filter(date >= start_date, date < end_date, AnimalCode == MaleID) %>%
-        nrow()
+        summarise(count = if (start_date < min_date) NA_integer_ else n()) %>%
+        pull(count)
 
       count
     },
@@ -93,6 +97,7 @@ cros_sex <- cros_sex %>%
       # Get the dataframe for the corresponding group.
       # Make sure the group name in cros_sex matches the names in SEQ_list.
       sex_df <- SEQ_list[[Group]]
+      max_date <- range_sexual_data %>% filter(group == Group) %>% pull(max_date)
 
       # Define the date range: past 12 months (you can also use Date - 365 if you prefer)
       start_date <- Date
@@ -104,7 +109,8 @@ cros_sex <- cros_sex %>%
       # (Change "focal" to another column if needed.)
       count <- sex_df %>%
         filter(date >= start_date, date < end_date, AnimalCode == MaleID) %>%
-        nrow()
+        summarise(count = if (end_date > max_date) NA_integer_ else n()) %>%
+        pull(count)
 
       count
     }
@@ -117,6 +123,9 @@ cros_sex <- cros_sex %>%
   Mount = ifelse(is.na(Mount), 0, Mount)) %>%
   distinct()
 
+
 sexualinteractions_df <- cros_sex %>% dplyr::select(Date, Group, AnimalCode, mount_last12, mount_coming12, Mount) %>% distinct()
+
+aa <- sexualinteractions_df %>% drop_na()
 
 write.csv(sexualinteractions_df, "/Users/mariagranell/Repositories/elo-sociality/sexual/OutputFiles/SexualInteractions_alarm_MS.csv", row.names = F)
